@@ -1,4 +1,4 @@
-# Env Monitor (Standalone)
+# AirBox
 
 A small, self-contained indoor **environmental monitor** built on an Adafruit
 QT Py ESP32-S3. It measures temperature, humidity, barometric pressure, and air
@@ -13,7 +13,7 @@ no cloud, no app, no Home Assistant required.
 - **Measures:** temperature & humidity (HDC3022, lab-grade), barometric
   pressure and air quality / IAQ (BME688 via Bosch BSEC2).
 - **Local dashboard:** live readings + 24 h trend charts at
-  `http://envmon.local`, served straight from the device. Works on a network
+  `http://airbox.local`, served straight from the device. Works on a network
   with no internet access.
 - **Easy WiFi setup:** on first boot it creates a setup hotspot; scan the QR
   code on the OLED with your phone, pick your network, done.
@@ -45,7 +45,7 @@ bus, `Wire1`). See [`hardware/`](hardware/) for the enclosure.
 ## Repository layout
 
 ```
-firmware/   Arduino sketch (env-monitor-standalone.ino, config.h, web_ui.h)
+firmware/   Arduino sketch (airbox.ino, config.h, web_ui.h)
 hardware/   3D-printable enclosure files + print notes
 docs/        setup, dashboard, and recovery guides
 ```

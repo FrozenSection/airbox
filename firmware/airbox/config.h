@@ -1,4 +1,4 @@
-// config.h — build-time defaults and feature flags for env-monitor-standalone.
+// config.h — build-time defaults and feature flags for AirBox.
 //
 // IMPORTANT: nothing secret lives here. WiFi credentials, the admin/OTA
 // password, and (optional) MQTT credentials are all entered through the
@@ -28,14 +28,14 @@
 // Setup access point is intentionally OPEN (no password) so the OLED join-QR
 // stays small enough to render crisply on the 0.96" screen, and so first-time
 // setup is one scan-and-tap. The AP only ever serves the provisioning page.
-#define AP_SSID           "EnvMon-Setup"
+#define AP_SSID           "AirBox-Setup"
 #define AP_IP_STR         "192.168.4.1"
 
 // ----- Runtime config defaults (overridable in the web Settings page) -----
-#define DEFAULT_DEVICE_NAME  "Env Monitor"
-#define DEFAULT_HOSTNAME     "envmon"        // -> http://envmon.local
+#define DEFAULT_DEVICE_NAME  "AirBox"
+#define DEFAULT_HOSTNAME     "airbox"        // -> http://airbox.local
 #define DEFAULT_TEMP_UNIT    'F'             // 'F' or 'C'
-#define DEFAULT_ADMIN_PASS   "envmon"        // protects /update and Settings; CHANGE in UI
+#define DEFAULT_ADMIN_PASS   "airbox"        // protects /update and Settings; CHANGE in UI
 
 // ----- Trend history ring buffer -----
 // 288 samples @ 5 min spacing = 24 h of trend. 4 channels x 288 x 4 B ≈ 4.6 KB.

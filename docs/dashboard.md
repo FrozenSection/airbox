@@ -1,6 +1,6 @@
 # Using the dashboard
 
-Open `http://envmon.local` on any device on the same WiFi network. The page has
+Open `http://airbox.local` on any device on the same WiFi network. The page has
 three tabs.
 
 ## Dashboard tab
@@ -38,7 +38,7 @@ The less-essential and raw values, kept out of the main view:
 - **Temperature unit** — °F or °C (applies to the live readings and charts).
 - **mDNS hostname** — changes the `.local` address (applies after a restart).
 - **Admin password** — protects firmware updates and settings. Leave blank to
-  keep the current one. **Change the default (`envmon`) after first setup.**
+  keep the current one. **Change the default (`airbox`) after first setup.**
 - **Firmware update** — opens the browser OTA uploader.
 - **Recalibrate air sensor** — clears the BSEC baseline (IAQ accuracy → 0).
 - **Reconfigure WiFi** / **Restart** — see [recovery.md](recovery.md).

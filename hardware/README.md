@@ -1,6 +1,6 @@
 # Hardware — enclosure
 
-3D-printable enclosure and mounting files for the standalone env-monitor.
+3D-printable enclosure and mounting files for the standalone AirBox.
 
 > **Files coming soon.** Drop the enclosure models in [`enclosure/`](enclosure/)
 > — STL for printing, plus a STEP or native CAD source for remixing.
@@ -9,9 +9,9 @@
 
 ```
 enclosure/
-├── env-monitor-case.stl        # main body
-├── env-monitor-lid.stl         # lid / vented front
-├── env-monitor.step            # editable CAD source
+├── airbox-case.stl        # main body
+├── airbox-lid.stl         # lid / vented front
+├── airbox.step            # editable CAD source
 └── ...
 ```
 

@@ -1,4 +1,4 @@
-// env-monitor-standalone — QT Py ESP32-S3 + BME688 (BSEC2) + HDC3022 + optional SSD1306
+// AirBox — QT Py ESP32-S3 + BME688 (BSEC2) + HDC3022 + optional SSD1306
 //
 // A STANDALONE indoor environmental monitor. No Home Assistant required:
 //   * WiFi is provisioned through a captive portal (OLED shows a join-QR).
@@ -932,7 +932,7 @@ void checkBootButton() {
 void setup() {
   Serial.begin(115200);
   delay(1500);
-  Serial.printf("\nenv-monitor-standalone v%s booting...\n", FW_VERSION);
+  Serial.printf("\nAirBox v%s booting...\n", FW_VERSION);
 
   // Watchdog first so everything below is protected.
   esp_task_wdt_config_t wdtConfig = {.timeout_ms = WATCHDOG_TIMEOUT_MS, .idle_core_mask = 0, .trigger_panic = true};
