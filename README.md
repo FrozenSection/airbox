@@ -35,6 +35,10 @@ bus, `Wire1`). See [`hardware/`](hardware/) for the enclosure.
 
 ## Getting started
 
+> Assembling and flashing a new unit? The step-by-step
+> [`docs/bringup-checklist.md`](docs/bringup-checklist.md) walks the whole
+> process — assemble → flash → provision → verify → burn-in.
+
 1. **Build the firmware** — see [`firmware/README.md`](firmware/README.md) for
    the board settings and library list, then flash over USB-C.
 2. **First-time WiFi setup** — [`docs/first-time-setup.md`](docs/first-time-setup.md).
