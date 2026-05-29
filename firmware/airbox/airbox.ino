@@ -32,9 +32,7 @@
 #include <esp_mac.h>
 #include <esp_task_wdt.h>
 #include <time.h>
-extern "C" {
-#include <qrcode.h>  // ricmoo/QRCode is a C library — guard against name mangling
-}
+#include "qrcode.h"  // QR encoder bundled in the ESP32 core (espressif__qrcode)
 
 #define ELEGANTOTA_USE_ASYNC_WEBSERVER 1
 #include <ESPAsyncWebServer.h>
@@ -480,17 +478,26 @@ bool isNightNow() {
   return (h >= cfg.nightStart || h < cfg.nightEnd);  // window wraps midnight
 }
 
-// Draw a QR code (text encoded) as filled rects. Version 3 (29 modules) at
-// scale 2 = 58 px — fits the 64 px-tall screen. ECC_LOW keeps short strings
-// (open-AP join string, short URL) within a v3 buffer.
+// Draw a QR code (text encoded) as filled rects using the ESP32 core's
+// built-in encoder (espressif__qrcode). Our strings are short (open-AP join
+// string, short URL) → version 2-3 (25-29 modules); at scale 2 that's 50-58 px,
+// fitting the 64 px-tall screen. The encoder is callback-based, so the draw
+// origin/scale are passed via file-scope statics.
+static int qrOx, qrOy, qrScale;
+static void qrDisplayCb(esp_qrcode_handle_t qr) {
+  int size = esp_qrcode_get_size(qr);
+  for (int y = 0; y < size; y++)
+    for (int x = 0; x < size; x++)
+      if (esp_qrcode_get_module(qr, x, y))
+        display.fillRect(qrOx + x * qrScale, qrOy + y * qrScale, qrScale, qrScale, SSD1306_WHITE);
+}
 void drawQR(const char* text, int ox, int oy, int scale) {
-  QRCode qr;
-  uint8_t data[150];  // >= qrcode_getBufferSize(3) (=106); fixed to avoid a VLA
-  if (qrcode_initText(&qr, data, 3, ECC_LOW, text) != 0) return;
-  for (uint8_t y = 0; y < qr.size; y++)
-    for (uint8_t x = 0; x < qr.size; x++)
-      if (qrcode_getModule(&qr, x, y))
-        display.fillRect(ox + x * scale, oy + y * scale, scale, scale, SSD1306_WHITE);
+  qrOx = ox; qrOy = oy; qrScale = scale;
+  esp_qrcode_config_t cfg = {};
+  cfg.display_func = qrDisplayCb;
+  cfg.max_qrcode_version = 4;  // bounds the encode buffer; our strings pick 2-3
+  cfg.qrcode_ecc_level = ESP_QRCODE_ECC_LOW;
+  esp_qrcode_generate(&cfg, text);
 }
 
 void showPortalScreen() {

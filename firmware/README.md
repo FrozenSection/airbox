@@ -24,15 +24,24 @@ dashboard, and provisions WiFi through a captive portal.
 | **ESP Async WebServer** | **ESP32Async** | the maintained fork — *not* me-no-dev |
 | **Async TCP** | **ESP32Async** | matching fork; install explicitly |
 | **ElegantOTA** | **Ayush Sharma** | v3.x, browser OTA |
-| **QRCode** | **Richard Moore (ricmoo)** | OLED setup/URL QR codes |
 | PubSubClient | Nick O'Leary | only if `ENABLE_MQTT` is set |
 
 > Install the **ESP32Async** versions of ESP Async WebServer / Async TCP. The
 > older `me-no-dev` packages are incompatible with arduino-esp32 v3.x. Pin the
 > versions once the sketch builds cleanly.
 
-`DNSServer`, `ESPmDNS`, `Update`, `Preferences`, `WiFi`, and `Wire` ship with
-the ESP32 core — no separate install.
+`DNSServer`, `ESPmDNS`, `Update`, `Preferences`, `WiFi`, `Wire`, and the QR
+encoder (`qrcode.h`, used for the OLED setup/URL codes) all ship with the ESP32
+core — no separate install. (Don't install the ricmoo "QRCode" library — its
+header name collides with the core's and would break the build.)
+
+### ElegantOTA async mode — handled automatically
+
+ElegantOTA must be told to use AsyncWebServer. A committed
+[`airbox/build_opt.h`](airbox/build_opt.h) injects
+`-DELEGANTOTA_USE_ASYNC_WEBSERVER=1` globally, which both Arduino IDE 2.x and
+arduino-cli honor — so there's nothing to configure and no library files to
+edit. (Verified: compiles clean on esp32:esp32 3.3.8 for the QT Py S3.)
 
 ## Build flags (`config.h`)
 
