@@ -1,0 +1,20 @@
+# Arduino IDE build artifacts
+build/
+*.bak
+*.bin
+*.hex
+*.elf
+*.map
+
+# Local / generated config (none should ever contain committed secrets,
+# but ignore any local overrides a builder might create)
+firmware/**/secrets.h
+firmware/**/local_config.h
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+
+# macOS
+.DS_Store

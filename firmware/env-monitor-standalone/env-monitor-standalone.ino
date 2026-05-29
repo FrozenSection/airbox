@@ -1,0 +1,1081 @@
+// env-monitor-standalone — QT Py ESP32-S3 + BME688 (BSEC2) + HDC3022 + optional SSD1306
+//
+// A STANDALONE indoor environmental monitor. No Home Assistant required:
+//   * WiFi is provisioned through a captive portal (OLED shows a join-QR).
+//   * Data is served from a local web dashboard (live values + trend charts).
+//   * Firmware updates happen in the browser (ElegantOTA at /update).
+//   * mDNS publishes the dashboard at http://<hostname>.local
+//
+// Forked from the Home Assistant MQTT version. The hardened sensor core
+// (BSEC2 + CRC32 NVS calibration, HDC3022 read path, per-sensor health /
+// staleness / reinit, 60 s task watchdog) is preserved as-is. MQTT/HA
+// discovery is retained behind ENABLE_MQTT (config.h), OFF by default.
+//
+// Recovery paths (see docs/recovery.md):
+//   1. Auto-fallback to the setup portal if WiFi won't connect at boot.
+//   2. Hold the BOOT button ~3 s (any time) to wipe WiFi and re-provision.
+//   3. "Reconfigure WiFi" button on the dashboard.
+// Calibration (NVS "bsec") is preserved across a WiFi reset.
+
+#include "config.h"
+
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <bsec2.h>
+#include <Adafruit_HDC302x.h>
+#include <WiFi.h>
+#include <DNSServer.h>
+#include <ESPmDNS.h>
+#include <ArduinoJson.h>
+#include <Preferences.h>
+#include <esp_mac.h>
+#include <esp_task_wdt.h>
+extern "C" {
+#include <qrcode.h>  // ricmoo/QRCode is a C library — guard against name mangling
+}
+
+#define ELEGANTOTA_USE_ASYNC_WEBSERVER 1
+#include <ESPAsyncWebServer.h>
+#include <ElegantOTA.h>
+
+#include "web_ui.h"
+
+#if ENABLE_MQTT
+#include <PubSubClient.h>
+#endif
+#if ENABLE_ARDUINO_OTA
+#include <ArduinoOTA.h>
+#endif
+
+// =================== OLED (optional) ===================
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire1, OLED_RESET);
+bool displayOK = false;
+
+// =================== Sensors ===================
+Bsec2 envSensor;
+Adafruit_HDC302x hdc;
+bool bmeOK = false;
+bool hdcOK = false;
+
+const bsecSensor bsecSubscriptionList[] = {
+  BSEC_OUTPUT_STATIC_IAQ,
+  BSEC_OUTPUT_CO2_EQUIVALENT,
+  BSEC_OUTPUT_BREATH_VOC_EQUIVALENT,
+  BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE,
+  BSEC_OUTPUT_RAW_TEMPERATURE,
+  BSEC_OUTPUT_RAW_HUMIDITY,
+  BSEC_OUTPUT_RAW_PRESSURE,
+};
+const uint8_t bsecSubscriptionCount =
+  sizeof(bsecSubscriptionList) / sizeof(bsecSubscriptionList[0]);
+
+Preferences bsecPrefs;
+uint8_t bsecStateBlob[BSEC_MAX_STATE_BLOB_SIZE];
+bool bsecStateSavedOnce = false;
+
+struct SensorData {
+  float hdcTempC, hdcRH;
+  float bmeTempC, bmeRH, bmePresHpa;
+  float bmeIaq, bmeEco2, bmeBvoc, bmeCompTempC;
+  uint8_t bmeIaqAccuracy;
+  bool hdcValid;
+  bool bmeValid;
+  unsigned long hdcLastGoodMs;
+  unsigned long bmeLastGoodMs;
+  uint16_t hdcFailStreak;
+  uint16_t bmeFailStreak;
+  uint32_t hdcTotalFails;
+  uint32_t bmeTotalFails;
+};
+SensorData latest = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, 0, 0, 0, 0, 0, 0};
+
+// Cadences
+const unsigned long READ_INTERVAL_DISPLAY_MS = 3000;
+const unsigned long READ_INTERVAL_HEADLESS_MS = 10000;
+const unsigned long SENSOR_REINIT_INTERVAL_MS = 300000;
+const unsigned long BSEC_STATE_SAVE_INTERVAL_MS = 3UL * 3600UL * 1000UL;
+const unsigned long WIFI_FORCE_RECONNECT_MS = 300000;
+const unsigned long MAX_VALUE_AGE_MS = 300000;
+const uint16_t MAX_FAIL_STREAK = 20;
+
+unsigned long lastRead = 0;
+unsigned long lastBmeReinit = 0;
+unsigned long lastHdcReinit = 0;
+unsigned long lastWifiReconnect = 0;
+unsigned long lastBsecStateSave = 0;
+unsigned long lastHistMs = 0;
+
+// =================== Trend history ring buffer ===================
+// Static allocation (link-time accounted, no heap fragmentation). Stores raw
+// values; temperature is converted to the display unit when served.
+float histT[HISTORY_SAMPLES];    // °C (raw)
+float histRH[HISTORY_SAMPLES];   // %
+float histP[HISTORY_SAMPLES];    // hPa
+float histIAQ[HISTORY_SAMPLES];  // IAQ
+int histHead = 0;
+int histCount = 0;
+
+// =================== Runtime config (NVS "cfg") ===================
+struct Config {
+  String ssid;
+  String pass;
+  String devName;
+  String hostname;
+  String adminPass;
+  char   unit;  // 'C' or 'F'
+#if ENABLE_MQTT
+  String mqttHost;
+  String mqttUser;
+  String mqttPass;
+#endif
+};
+Config cfg;
+Preferences cfgPrefs;
+
+// =================== Web / network ===================
+AsyncWebServer server(80);
+DNSServer dnsServer;
+String deviceId;     // qtpy_xxxxxx (from MAC)
+IPAddress apIP(192, 168, 4, 1);
+
+enum Mode { MODE_PORTAL, MODE_RUN };
+Mode mode = MODE_RUN;
+
+// Cross-task action flags. Web handlers run on the AsyncTCP task and MUST NOT
+// block (no I2C / NVS / restart). They only set these flags; loop() performs
+// the work on the main task.
+volatile bool pendingSaveWifi = false;
+volatile bool pendingSaveSettings = false;
+volatile bool pendingRestart = false;
+volatile bool pendingReconfigure = false;
+volatile bool pendingRecalibrate = false;
+volatile bool pendingFactoryReset = false;
+
+// Staging buffers for the above (written in handlers, read in loop()).
+String stgSsid, stgWifiPass;
+String stgName, stgUnit, stgHost, stgPass;
+#if ENABLE_MQTT
+String stgMqttHost, stgMqttUser, stgMqttPass;
+#endif
+
+// =================== MQTT (optional) ===================
+#if ENABLE_MQTT
+WiFiClient wifiClient;
+PubSubClient mqtt(wifiClient);
+String haDeviceName, roomSlug, stateTopic, availTopic;
+const char* DISCOVERY_PREFIX = "homeassistant";
+const uint16_t MQTT_PORT = 1883;
+unsigned long lastPublish = 0;
+unsigned long lastMqttAttempt = 0;
+const unsigned long PUBLISH_INTERVAL_MS = 30000;
+const unsigned long MQTT_RETRY_MS = 5000;
+#endif
+
+static inline bool inRange(float v, float lo, float hi) {
+  return !isnan(v) && !isinf(v) && v >= lo && v <= hi;
+}
+static inline float toUnit(float c) {
+  return (cfg.unit == 'F') ? (c * 9.0f / 5.0f + 32.0f) : c;
+}
+
+// =================== Watchdog helpers ===================
+void wdtReconfigure(uint32_t ms) {
+  esp_task_wdt_config_t c = {.timeout_ms = ms, .idle_core_mask = 0, .trigger_panic = true};
+  esp_task_wdt_reconfigure(&c);
+}
+
+// =================== Config store ===================
+void loadConfig() {
+  cfgPrefs.begin("cfg", true);  // read-only
+  cfg.ssid      = cfgPrefs.getString("ssid", "");
+  cfg.pass      = cfgPrefs.getString("pass", "");
+  cfg.devName   = cfgPrefs.getString("name", DEFAULT_DEVICE_NAME);
+  cfg.hostname  = cfgPrefs.getString("host", DEFAULT_HOSTNAME);
+  cfg.adminPass = cfgPrefs.getString("admin", DEFAULT_ADMIN_PASS);
+  cfg.unit      = cfgPrefs.getString("unit", String(DEFAULT_TEMP_UNIT))[0];
+#if ENABLE_MQTT
+  cfg.mqttHost  = cfgPrefs.getString("mhost", "");
+  cfg.mqttUser  = cfgPrefs.getString("muser", "");
+  cfg.mqttPass  = cfgPrefs.getString("mpass", "");
+#endif
+  cfgPrefs.end();
+  if (cfg.unit != 'C' && cfg.unit != 'F') cfg.unit = DEFAULT_TEMP_UNIT;
+}
+
+void saveWifiCreds(const String& ssid, const String& pass) {
+  cfgPrefs.begin("cfg", false);
+  cfgPrefs.putString("ssid", ssid);
+  cfgPrefs.putString("pass", pass);
+  cfgPrefs.end();
+}
+
+// Clears ONLY the WiFi credentials — device name, unit, and the "bsec"
+// calibration namespace are preserved across a WiFi reset.
+void clearWifiCreds() {
+  cfgPrefs.begin("cfg", false);
+  cfgPrefs.remove("ssid");
+  cfgPrefs.remove("pass");
+  cfgPrefs.end();
+}
+
+void applyAndSaveSettings() {
+  if (stgName.length()) cfg.devName = stgName;
+  if (stgUnit.length()) cfg.unit = stgUnit[0];
+  if (stgHost.length()) cfg.hostname = stgHost;
+  if (stgPass.length()) cfg.adminPass = stgPass;  // blank = keep current
+  if (cfg.unit != 'C' && cfg.unit != 'F') cfg.unit = DEFAULT_TEMP_UNIT;
+  cfgPrefs.begin("cfg", false);
+  cfgPrefs.putString("name", cfg.devName);
+  cfgPrefs.putString("unit", String(cfg.unit));
+  cfgPrefs.putString("host", cfg.hostname);
+  cfgPrefs.putString("admin", cfg.adminPass);
+#if ENABLE_MQTT
+  if (stgMqttHost.length()) cfg.mqttHost = stgMqttHost;
+  if (stgMqttUser.length()) cfg.mqttUser = stgMqttUser;
+  if (stgMqttPass.length()) cfg.mqttPass = stgMqttPass;
+  cfgPrefs.putString("mhost", cfg.mqttHost);
+  cfgPrefs.putString("muser", cfg.mqttUser);
+  cfgPrefs.putString("mpass", cfg.mqttPass);
+#endif
+  cfgPrefs.end();
+  Serial.println("Settings saved");
+}
+
+// =================== BSEC callback + NVS state (preserved) ===================
+void bsecDataCallback(bme68x_data /*data*/, bsecOutputs outputs, Bsec2 /*bsec*/) {
+  if (!outputs.nOutputs) return;
+  for (uint8_t i = 0; i < outputs.nOutputs; i++) {
+    const bsecData out = outputs.output[i];
+    switch (out.sensor_id) {
+      case BSEC_OUTPUT_STATIC_IAQ:
+        latest.bmeIaq = out.signal;
+        latest.bmeIaqAccuracy = out.accuracy;
+        break;
+      case BSEC_OUTPUT_CO2_EQUIVALENT:
+        latest.bmeEco2 = out.signal;
+        break;
+      case BSEC_OUTPUT_BREATH_VOC_EQUIVALENT:
+        latest.bmeBvoc = out.signal;
+        break;
+      case BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE:
+        if (inRange(out.signal, -40.0f, 85.0f)) latest.bmeCompTempC = out.signal;
+        break;
+      case BSEC_OUTPUT_RAW_TEMPERATURE:
+        if (inRange(out.signal, -40.0f, 85.0f)) latest.bmeTempC = out.signal;
+        break;
+      case BSEC_OUTPUT_RAW_HUMIDITY:
+        if (inRange(out.signal, 0.0f, 100.0f)) latest.bmeRH = out.signal;
+        break;
+      case BSEC_OUTPUT_RAW_PRESSURE:
+        if (inRange(out.signal, 800.0f, 1100.0f)) latest.bmePresHpa = out.signal;
+        break;
+      default:
+        break;
+    }
+  }
+  latest.bmeValid = true;
+  latest.bmeLastGoodMs = millis();
+  latest.bmeFailStreak = 0;
+}
+
+void logBsecStatus(const char* context) {
+  Serial.printf("  %s — BSEC status=%d, BME68x status=%d\n",
+                context, (int)envSensor.status, (int)envSensor.sensor.status);
+}
+
+static uint32_t bsecCrc32(const uint8_t* data, size_t len) {
+  uint32_t crc = 0xFFFFFFFF;
+  for (size_t i = 0; i < len; i++) {
+    crc ^= data[i];
+    for (uint8_t k = 0; k < 8; k++) crc = (crc >> 1) ^ (0xEDB88320 & -(crc & 1));
+  }
+  return ~crc;
+}
+
+void loadBsecState() {
+  const size_t blobWithCrcSize = 4 + BSEC_MAX_STATE_BLOB_SIZE;
+  uint8_t combined[blobWithCrcSize];
+  bsecPrefs.begin("bsec", true);
+  size_t got = bsecPrefs.getBytes("state", combined, blobWithCrcSize);
+  bsecPrefs.end();
+
+  if (got == BSEC_MAX_STATE_BLOB_SIZE) {
+    memcpy(bsecStateBlob, combined, BSEC_MAX_STATE_BLOB_SIZE);
+    if (envSensor.setState(bsecStateBlob))
+      Serial.println("BSEC state restored from NVS (legacy format, no CRC)");
+    else
+      Serial.println("BSEC setState() failed on legacy blob — starting fresh");
+    return;
+  }
+  if (got != blobWithCrcSize) {
+    Serial.printf("No saved BSEC state (got %u bytes) — fresh calibration\n", (unsigned)got);
+    return;
+  }
+  uint32_t storedCrc;
+  memcpy(&storedCrc, combined, 4);
+  uint32_t computedCrc = bsecCrc32(combined + 4, BSEC_MAX_STATE_BLOB_SIZE);
+  if (storedCrc != computedCrc) {
+    Serial.printf("BSEC state CRC mismatch (stored=0x%08X, computed=0x%08X) — starting fresh\n",
+                  (unsigned)storedCrc, (unsigned)computedCrc);
+    return;
+  }
+  memcpy(bsecStateBlob, combined + 4, BSEC_MAX_STATE_BLOB_SIZE);
+  if (envSensor.setState(bsecStateBlob))
+    Serial.println("BSEC state restored from NVS (CRC verified)");
+  else
+    Serial.println("BSEC setState() failed despite valid CRC — starting fresh");
+}
+
+void saveBsecState() {
+  if (!envSensor.getState(bsecStateBlob)) {
+    Serial.println("BSEC getState() failed, skipping NVS save");
+    return;
+  }
+  const size_t blobWithCrcSize = 4 + BSEC_MAX_STATE_BLOB_SIZE;
+  uint8_t combined[blobWithCrcSize];
+  uint32_t crc = bsecCrc32(bsecStateBlob, BSEC_MAX_STATE_BLOB_SIZE);
+  memcpy(combined, &crc, 4);
+  memcpy(combined + 4, bsecStateBlob, BSEC_MAX_STATE_BLOB_SIZE);
+  bsecPrefs.begin("bsec", false);
+  bsecPrefs.putBytes("state", combined, blobWithCrcSize);
+  bsecPrefs.end();
+  Serial.printf("BSEC state saved to NVS (accuracy=%u, crc=0x%08X)\n",
+                (unsigned)latest.bmeIaqAccuracy, (unsigned)crc);
+}
+
+// =================== Sensor reads / reinit (preserved) ===================
+void readSensors() {
+  if (hdcOK) {
+    double t = 0, h = 0;
+    if (hdc.readTemperatureHumidityOnDemand(t, h, TRIGGERMODE_LP0)
+        && inRange((float)t, -40.0f, 85.0f) && inRange((float)h, 0.0f, 100.0f)) {
+      latest.hdcTempC = (float)t;
+      latest.hdcRH = (float)h;
+      latest.hdcValid = true;
+      latest.hdcLastGoodMs = millis();
+      latest.hdcFailStreak = 0;
+    } else {
+      latest.hdcFailStreak++;
+      latest.hdcTotalFails++;
+      Serial.printf("HDC read failed (streak=%u, total=%lu)\n",
+                    latest.hdcFailStreak, (unsigned long)latest.hdcTotalFails);
+    }
+  }
+  Serial.printf("HDC: %.2f C, %.1f%%RH | BME: %.2f C, %.1f%%RH, %.2f hPa | IAQ:%.0f acc:%u\n",
+                latest.hdcTempC, latest.hdcRH, latest.bmeTempC, latest.bmeRH,
+                latest.bmePresHpa, latest.bmeIaq, latest.bmeIaqAccuracy);
+}
+
+void reinitBme() {
+  if (bmeOK) return;
+  Serial.println("BME/BSEC reinit attempt...");
+  if (envSensor.begin(BME68X_I2C_ADDR_HIGH, Wire1)) {
+    envSensor.attachCallback(bsecDataCallback);
+    loadBsecState();
+    envSensor.updateSubscription(const_cast<bsecSensor*>(bsecSubscriptionList),
+                                 bsecSubscriptionCount, BSEC_SAMPLE_RATE_LP);
+    if ((int)envSensor.status >= 0) {
+      bmeOK = true;
+      latest.bmeFailStreak = 0;
+      Serial.println("BME688/BSEC responsive again, awaiting first output");
+    } else {
+      Serial.println("BSEC subscription error during reinit — will retry in 5 min");
+      logBsecStatus("reinit updateSubscription");
+    }
+  } else {
+    Serial.println("BME reinit failed (begin() returned false) — will retry in 5 min");
+    logBsecStatus("reinit begin");
+  }
+}
+
+void reinitHdc() {
+  if (hdcOK) return;
+  Serial.println("HDC reinit attempt...");
+  if (hdc.begin(0x44, &Wire1)) {
+    hdcOK = true;
+    latest.hdcFailStreak = 0;
+    Serial.println("HDC3022 chip responsive again, awaiting first good read");
+  } else {
+    Serial.println("HDC reinit failed (begin() returned false) — will retry in 5 min");
+  }
+}
+
+void recordHistory() {
+  histT[histHead]   = (hdcOK && latest.hdcValid) ? latest.hdcTempC : NAN;
+  histRH[histHead]  = (hdcOK && latest.hdcValid) ? latest.hdcRH : NAN;
+  histP[histHead]   = (bmeOK && latest.bmeValid) ? latest.bmePresHpa : NAN;
+  histIAQ[histHead] = (bmeOK && latest.bmeValid) ? latest.bmeIaq : NAN;
+  histHead = (histHead + 1) % HISTORY_SAMPLES;
+  if (histCount < HISTORY_SAMPLES) histCount++;
+}
+
+// =================== OLED rendering ===================
+// Draw a QR code (text encoded) as filled rects. Version 3 (29 modules) at
+// scale 2 = 58 px — fits the 64 px-tall screen. ECC_LOW keeps short strings
+// (open-AP join string, short URL) within a v3 buffer.
+void drawQR(const char* text, int ox, int oy, int scale) {
+  QRCode qr;
+  uint8_t data[150];  // >= qrcode_getBufferSize(3) (=106); fixed to avoid a VLA
+  if (qrcode_initText(&qr, data, 3, ECC_LOW, text) != 0) return;
+  for (uint8_t y = 0; y < qr.size; y++)
+    for (uint8_t x = 0; x < qr.size; x++)
+      if (qrcode_getModule(&qr, x, y))
+        display.fillRect(ox + x * scale, oy + y * scale, scale, scale, SSD1306_WHITE);
+}
+
+void showPortalScreen() {
+  if (!displayOK) return;
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.println("WiFi Setup");
+  display.setCursor(0, 14);
+  display.println("Scan to join:");
+  display.setCursor(0, 26);
+  display.println(AP_SSID);
+  display.setCursor(0, 42);
+  display.println("then open");
+  display.setCursor(0, 54);
+  display.println(AP_IP_STR);
+  // QR for joining the open setup AP. Format: WIFI:S:<ssid>;T:nopass;;
+  drawQR("WIFI:S:" AP_SSID ";T:nopass;;", 70, 3, 2);
+  display.display();
+}
+
+void showUrlQrSplash() {
+  if (!displayOK) return;
+  String url = String("http://") + cfg.hostname + ".local";
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.println("Connected!");
+  display.setCursor(0, 16);
+  display.println("Dashboard:");
+  display.setCursor(0, 30);
+  display.println(cfg.hostname + ".local");
+  display.setCursor(0, 44);
+  display.println(WiFi.localIP().toString());
+  drawQR(url.c_str(), 70, 3, 2);
+  display.display();
+}
+
+void updateRunDisplay() {
+  if (!displayOK) return;
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.print(cfg.devName.substring(0, 16));
+  display.setCursor(110, 0);
+  display.print(WiFi.status() == WL_CONNECTED ? "W" : "-");
+  display.drawFastHLine(0, 9, SCREEN_WIDTH, SSD1306_WHITE);
+
+  if (hdcOK && latest.hdcValid) {
+    display.setTextSize(2);
+    display.setCursor(0, 14);
+    display.printf("%.1f%c", toUnit(latest.hdcTempC), cfg.unit);
+    display.setCursor(74, 14);
+    display.printf("%.0f%%", latest.hdcRH);
+  }
+  display.setTextSize(1);
+  if (bmeOK && latest.bmeValid) {
+    display.setCursor(0, 36);
+    display.printf("Pres:%.1f hPa", latest.bmePresHpa);
+    display.setCursor(0, 46);
+    display.printf("IAQ :%.0f acc:%u", latest.bmeIaq, latest.bmeIaqAccuracy);
+  }
+  display.setCursor(0, 56);
+  display.print(cfg.hostname + ".local");
+  display.display();
+}
+
+// =================== Web handlers ===================
+void buildDataJson(JsonDocument& doc) {
+  SensorData s = latest;  // snapshot (cross-task; cosmetic tearing acceptable)
+  doc["name"] = cfg.devName;
+  doc["hostname"] = cfg.hostname;
+  doc["unit"] = String(cfg.unit);
+  doc["fw"] = FW_VERSION;
+  if (hdcOK && s.hdcValid) {
+    doc["temp"] = toUnit(s.hdcTempC);
+    doc["rh"] = s.hdcRH;
+  }
+  if (bmeOK && s.bmeValid) {
+    doc["pressure"] = s.bmePresHpa;
+    doc["iaq"] = s.bmeIaq;
+    doc["iaq_acc"] = s.bmeIaqAccuracy;
+    doc["bme_temp"] = toUnit(s.bmeTempC);
+    doc["bme_rh"] = s.bmeRH;
+    doc["eco2"] = s.bmeEco2;
+    doc["bvoc"] = s.bmeBvoc;
+  }
+  doc["hdc_ok"] = (hdcOK && s.hdcValid);
+  doc["bme_ok"] = (bmeOK && s.bmeValid);
+  doc["rssi"] = WiFi.RSSI();
+  doc["uptime"] = millis() / 1000;
+  doc["heap"] = ESP.getFreeHeap();
+  if (s.hdcLastGoodMs > 0) doc["hdc_age"] = (millis() - s.hdcLastGoodMs) / 1000;
+  if (s.bmeLastGoodMs > 0) doc["bme_age"] = (millis() - s.bmeLastGoodMs) / 1000;
+#if ENABLE_MQTT
+  doc["mqtt_enabled"] = true;
+  doc["mqtt_host"] = cfg.mqttHost;
+  doc["mqtt_user"] = cfg.mqttUser;
+#endif
+}
+
+void buildHistoryJson(JsonDocument& doc) {
+  doc["interval_s"] = HISTORY_INTERVAL_MS / 1000;
+  doc["unit"] = String(cfg.unit);
+  JsonArray at = doc["t"].to<JsonArray>();
+  JsonArray arh = doc["rh"].to<JsonArray>();
+  JsonArray ap = doc["p"].to<JsonArray>();
+  JsonArray ai = doc["iaq"].to<JsonArray>();
+  // Emit oldest -> newest. ArduinoJson serializes NaN as JSON null by default
+  // (ARDUINOJSON_ENABLE_NAN == 0), so gaps come through cleanly for the chart.
+  for (int k = 0; k < histCount; k++) {
+    int idx = (histHead - histCount + k + HISTORY_SAMPLES * 2) % HISTORY_SAMPLES;
+    at.add(toUnit(histT[idx]));   // toUnit(NaN) == NaN -> null
+    arh.add(histRH[idx]);
+    ap.add(histP[idx]);
+    ai.add(histIAQ[idx]);
+  }
+}
+
+void registerRunRoutes() {
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest* req) {
+    // On ESP32 flash is memory-mapped, so the const-char* send() overload reads
+    // the PROGMEM page directly. Transient ~16 KB String copy; fine on S3 heap.
+    req->send(200, "text/html", INDEX_HTML);
+  });
+  server.on("/api/data", HTTP_GET, [](AsyncWebServerRequest* req) {
+    JsonDocument doc;
+    buildDataJson(doc);
+    AsyncResponseStream* res = req->beginResponseStream("application/json");
+    serializeJson(doc, *res);
+    req->send(res);
+  });
+  server.on("/api/history", HTTP_GET, [](AsyncWebServerRequest* req) {
+    JsonDocument doc;
+    buildHistoryJson(doc);
+    AsyncResponseStream* res = req->beginResponseStream("application/json");
+    serializeJson(doc, *res);
+    req->send(res);
+  });
+  server.on("/api/settings", HTTP_POST, [](AsyncWebServerRequest* req) {
+    auto P = [&](const char* k) -> String {
+      return req->hasParam(k, true) ? req->getParam(k, true)->value() : String("");
+    };
+    stgName = P("name"); stgUnit = P("unit"); stgHost = P("hostname"); stgPass = P("pass");
+#if ENABLE_MQTT
+    stgMqttHost = P("mqtt_host"); stgMqttUser = P("mqtt_user"); stgMqttPass = P("mqtt_pass");
+#endif
+    pendingSaveSettings = true;
+    req->send(200, "application/json", "{\"ok\":true}");
+  });
+  server.on("/api/restart", HTTP_POST, [](AsyncWebServerRequest* req) {
+    pendingRestart = true; req->send(200, "application/json", "{\"ok\":true}");
+  });
+  server.on("/api/recalibrate", HTTP_POST, [](AsyncWebServerRequest* req) {
+    pendingRecalibrate = true; req->send(200, "application/json", "{\"ok\":true}");
+  });
+  server.on("/api/reconfigure", HTTP_POST, [](AsyncWebServerRequest* req) {
+    pendingReconfigure = true; req->send(200, "application/json", "{\"ok\":true}");
+  });
+  server.onNotFound([](AsyncWebServerRequest* req) { req->send(404, "text/plain", "Not found"); });
+}
+
+void sendScanJson(AsyncWebServerRequest* req) {
+  int n = WiFi.scanComplete();
+  JsonDocument doc;
+  if (n == WIFI_SCAN_RUNNING || n == WIFI_SCAN_FAILED) {
+    doc["scanning"] = true;
+  } else {
+    doc["scanning"] = false;
+    JsonArray arr = doc["networks"].to<JsonArray>();
+    for (int i = 0; i < n && i < 20; i++) {
+      JsonObject o = arr.add<JsonObject>();
+      o["ssid"] = WiFi.SSID(i);
+      o["rssi"] = WiFi.RSSI(i);
+      o["enc"] = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
+    }
+  }
+  AsyncResponseStream* res = req->beginResponseStream("application/json");
+  serializeJson(doc, *res);
+  req->send(res);
+}
+
+void registerPortalRoutes() {
+  auto portal = [](AsyncWebServerRequest* req) { req->send(200, "text/html", PORTAL_HTML); };
+  server.on("/", HTTP_GET, portal);
+  server.on("/scan", HTTP_GET, [](AsyncWebServerRequest* req) { sendScanJson(req); });
+  server.on("/rescan", HTTP_GET, [](AsyncWebServerRequest* req) {
+    WiFi.scanDelete();
+    WiFi.scanNetworks(true /*async*/, true /*show hidden*/);
+    req->send(200, "application/json", "{\"ok\":true}");
+  });
+  server.on("/save", HTTP_POST, [](AsyncWebServerRequest* req) {
+    stgSsid = req->hasParam("ssid", true) ? req->getParam("ssid", true)->value() : String("");
+    stgWifiPass = req->hasParam("pass", true) ? req->getParam("pass", true)->value() : String("");
+    req->send(200, "application/json", "{\"ok\":true}");
+    pendingSaveWifi = true;
+  });
+  // OS captive-portal probes -> redirect into the portal so the sheet pops.
+  server.on("/generate_204", HTTP_GET, [](AsyncWebServerRequest* req) {
+    req->redirect(String("http://") + AP_IP_STR + "/");
+  });
+  server.on("/gen_204", HTTP_GET, [](AsyncWebServerRequest* req) {
+    req->redirect(String("http://") + AP_IP_STR + "/");
+  });
+  server.on("/hotspot-detect.html", HTTP_GET, portal);              // Apple
+  server.on("/library/test/success.html", HTTP_GET, portal);        // Apple
+  server.on("/ncsi.txt", HTTP_GET, [](AsyncWebServerRequest* req) { // Windows
+    req->redirect(String("http://") + AP_IP_STR + "/");
+  });
+  server.on("/connecttest.txt", HTTP_GET, [](AsyncWebServerRequest* req) {
+    req->redirect(String("http://") + AP_IP_STR + "/");
+  });
+  server.onNotFound([](AsyncWebServerRequest* req) {
+    req->redirect(String("http://") + AP_IP_STR + "/");
+  });
+}
+
+// =================== OTA (browser via ElegantOTA) ===================
+void setupElegantOTA() {
+  // Auth + callbacks before begin() so they apply to the mounted /update route.
+  ElegantOTA.setAuth("admin", cfg.adminPass.c_str());
+  ElegantOTA.onStart([]() {
+    wdtReconfigure(OTA_WATCHDOG_MS);  // extend WDT for the flash duration
+    Serial.println("OTA: starting (WDT extended)");
+  });
+  ElegantOTA.onEnd([](bool success) {
+    if (!success) {
+      wdtReconfigure(WATCHDOG_TIMEOUT_MS);  // restore on failure (success reboots)
+      Serial.println("OTA: failed — WDT restored");
+    } else {
+      Serial.println("OTA: complete, rebooting");
+    }
+  });
+  ElegantOTA.begin(&server);
+}
+
+#if ENABLE_ARDUINO_OTA
+void setupArduinoOTA() {
+  ArduinoOTA.setHostname(cfg.hostname.c_str());
+  ArduinoOTA.setPassword(cfg.adminPass.c_str());
+  ArduinoOTA.onStart([]() { wdtReconfigure(OTA_WATCHDOG_MS); });
+  ArduinoOTA.onError([](ota_error_t) { wdtReconfigure(WATCHDOG_TIMEOUT_MS); });
+  ArduinoOTA.begin();
+}
+#endif
+
+// =================== MQTT (optional, preserved) ===================
+#if ENABLE_MQTT
+void publishOneDiscovery(const char* component, const char* objectId, const char* friendlyName,
+                         const char* unit, const char* deviceClass, const char* valueKey,
+                         uint8_t precision, bool isDiagnostic = false, bool isBinary = false,
+                         bool isText = false) {
+  String configTopic = String(DISCOVERY_PREFIX) + "/" + component + "/" + deviceId + "_" + objectId + "/config";
+  JsonDocument doc;
+  doc["name"] = friendlyName;
+  doc["unique_id"] = deviceId + "_" + objectId;
+  doc["object_id"] = roomSlug + "_" + objectId;
+  doc["state_topic"] = stateTopic;
+  doc["availability_topic"] = availTopic;
+  doc["payload_available"] = "online";
+  doc["payload_not_available"] = "offline";
+  doc["value_template"] = String("{{ value_json.") + valueKey + " }}";
+  if (isBinary) { doc["payload_on"] = "1"; doc["payload_off"] = "0"; }
+  else if (!isText) {
+    if (strlen(unit) > 0) doc["unit_of_measurement"] = unit;
+    doc["state_class"] = "measurement";
+    doc["suggested_display_precision"] = precision;
+  }
+  if (strlen(deviceClass) > 0) doc["device_class"] = deviceClass;
+  if (isDiagnostic) doc["entity_category"] = "diagnostic";
+  JsonObject device = doc["device"].to<JsonObject>();
+  JsonArray ids = device["identifiers"].to<JsonArray>();
+  ids.add(deviceId);
+  device["name"] = haDeviceName;
+  device["manufacturer"] = "SotaGoat Labs";
+  device["model"] = DEVICE_MODEL;
+  device["sw_version"] = FW_VERSION;
+  char payload[768];
+  size_t nn = serializeJson(doc, payload, sizeof(payload));
+  mqtt.publish(configTopic.c_str(), (uint8_t*)payload, nn, true);
+}
+
+void publishDiscovery() {
+  if (hdcOK) {
+    publishOneDiscovery("sensor", "hdc_temp", "Temperature", "°C", "temperature", "hdc_temp_c", 1);
+    publishOneDiscovery("sensor", "hdc_rh", "Humidity", "%", "humidity", "hdc_rh", 0);
+  }
+  if (bmeOK) {
+    publishOneDiscovery("sensor", "bme_pres", "Pressure", "hPa", "atmospheric_pressure", "bme_pres_hpa", 1);
+    publishOneDiscovery("sensor", "bme_iaq", "IAQ", "", "", "bme_iaq", 0);
+    publishOneDiscovery("sensor", "bme_eco2", "eCO2", "ppm", "carbon_dioxide", "bme_eco2", 0);
+    publishOneDiscovery("sensor", "bme_iaq_accuracy", "IAQ Calibration", "", "", "bme_iaq_accuracy", 0, true);
+  }
+  publishOneDiscovery("sensor", "rssi", "WiFi RSSI", "dBm", "signal_strength", "rssi", 0, true);
+  publishOneDiscovery("sensor", "uptime", "Uptime", "s", "duration", "uptime", 0, true);
+}
+
+void tryConnectMQTT() {
+  if (mqtt.connected() || cfg.mqttHost.length() == 0) return;
+  bool ok = mqtt.connect(deviceId.c_str(), cfg.mqttUser.c_str(), cfg.mqttPass.c_str(),
+                         availTopic.c_str(), 1, true, "offline");
+  if (ok) {
+    mqtt.publish(availTopic.c_str(), "online", true);
+    publishDiscovery();
+  } else {
+    Serial.printf("MQTT failed, state=%d\n", mqtt.state());
+  }
+}
+
+void publishState() {
+  JsonDocument doc;
+  if (hdcOK && latest.hdcValid) { doc["hdc_temp_c"] = latest.hdcTempC; doc["hdc_rh"] = latest.hdcRH; }
+  if (bmeOK && latest.bmeValid) {
+    doc["bme_pres_hpa"] = latest.bmePresHpa;
+    doc["bme_iaq"] = round(latest.bmeIaq);
+    doc["bme_eco2"] = round(latest.bmeEco2);
+    doc["bme_iaq_accuracy"] = latest.bmeIaqAccuracy;
+  }
+  doc["rssi"] = WiFi.RSSI();
+  doc["uptime"] = millis() / 1000;
+  char payload[384];
+  size_t nn = serializeJson(doc, payload, sizeof(payload));
+  mqtt.publish(stateTopic.c_str(), (uint8_t*)payload, nn, false);
+}
+
+void setupMqtt() {
+  haDeviceName = cfg.devName;
+  roomSlug = cfg.devName; roomSlug.toLowerCase(); roomSlug.replace(' ', '_');
+  stateTopic = String("env/") + deviceId + "/state";
+  availTopic = String("env/") + deviceId + "/availability";
+  mqtt.setServer(cfg.mqttHost.c_str(), MQTT_PORT);
+  mqtt.setBufferSize(1024);
+  mqtt.setSocketTimeout(5);
+}
+#endif  // ENABLE_MQTT
+
+// =================== Sensor init ===================
+void initSensors() {
+  Wire1.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+  Wire1.setClock(100000);
+  Wire1.setTimeOut(50);
+
+  displayOK = display.begin(SSD1306_SWITCHCAPVCC, 0x3D);
+  if (!displayOK) displayOK = display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  if (displayOK) {
+    display.clearDisplay();
+    display.setTextColor(SSD1306_WHITE);
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.println("Booting...");
+    display.display();
+    Serial.println("OLED detected");
+  } else {
+    Serial.println("No OLED on bus, running headless");
+  }
+
+  if (envSensor.begin(BME68X_I2C_ADDR_HIGH, Wire1)) {
+    envSensor.attachCallback(bsecDataCallback);
+    loadBsecState();
+    envSensor.updateSubscription(const_cast<bsecSensor*>(bsecSubscriptionList),
+                                 bsecSubscriptionCount, BSEC_SAMPLE_RATE_LP);
+    if ((int)envSensor.status >= 0) {
+      bmeOK = true;
+      Serial.println("BME688/BSEC initialized at LP (3 s)");
+    } else {
+      Serial.println("BSEC subscription error (will retry every 5 min)");
+      logBsecStatus("setup updateSubscription");
+    }
+  } else {
+    Serial.println("BME688 init failed (will retry every 5 min)");
+    logBsecStatus("setup begin");
+  }
+
+  hdcOK = hdc.begin(0x44, &Wire1);
+  if (!hdcOK) Serial.println("HDC3022 init failed (will retry every 5 min)");
+}
+
+// =================== WiFi bring-up ===================
+bool connectSTA() {
+  Serial.printf("WiFi connecting to %s...\n", cfg.ssid.c_str());
+  if (displayOK) {
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.printf("WiFi:\n%s", cfg.ssid.c_str());
+    display.display();
+  }
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.persistent(false);
+  WiFi.begin(cfg.ssid.c_str(), cfg.pass.c_str());
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 30000) {
+    delay(500);
+    Serial.print(".");
+    esp_task_wdt_reset();
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("\nWiFi OK, IP: %s, RSSI: %d dBm\n",
+                  WiFi.localIP().toString().c_str(), WiFi.RSSI());
+    return true;
+  }
+  Serial.println("\nWiFi connect timed out");
+  return false;
+}
+
+void startPortal() {
+  mode = MODE_PORTAL;
+  Serial.println("Starting captive setup portal (AP: " AP_SSID ")");
+  // AP_STA so the portal can scan for the user's networks; we never auto-
+  // associate STA here, so the AP stays stable apart from brief scan blips.
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
+  WiFi.softAP(AP_SSID);  // open network — see config.h rationale
+  WiFi.scanNetworks(true, true);  // kick off async scan for the portal list
+  dnsServer.start(53, "*", apIP);
+  registerPortalRoutes();
+  setupElegantOTA();  // allow recovery flashing from the portal too
+  server.begin();
+  showPortalScreen();
+  Serial.println("Portal ready at http://" AP_IP_STR);
+}
+
+void startRun() {
+  mode = MODE_RUN;
+  if (!MDNS.begin(cfg.hostname.c_str()))
+    Serial.println("mDNS start failed");
+  else
+    Serial.printf("mDNS: http://%s.local\n", cfg.hostname.c_str());
+  registerRunRoutes();
+  setupElegantOTA();
+  server.begin();
+  MDNS.addService("http", "tcp", 80);
+#if ENABLE_ARDUINO_OTA
+  setupArduinoOTA();
+#endif
+#if ENABLE_MQTT
+  setupMqtt();
+  tryConnectMQTT();
+#endif
+  Serial.println("Dashboard up");
+}
+
+// =================== Pending-action handler (loop context) ===================
+void handlePendingActions() {
+  if (pendingFactoryReset || pendingReconfigure) {
+    Serial.println("Wiping WiFi creds, rebooting into portal");
+    if (displayOK) {
+      display.clearDisplay(); display.setCursor(0, 0);
+      display.println("WiFi reset.\nRebooting to\nsetup portal..."); display.display();
+    }
+    clearWifiCreds();
+    delay(800);
+    ESP.restart();
+  }
+  if (pendingSaveWifi) {
+    pendingSaveWifi = false;
+    Serial.printf("Saving WiFi creds for %s, rebooting\n", stgSsid.c_str());
+    saveWifiCreds(stgSsid, stgWifiPass);
+    delay(800);
+    ESP.restart();
+  }
+  if (pendingRecalibrate) {
+    pendingRecalibrate = false;
+    Serial.println("Clearing BSEC calibration, rebooting");
+    bsecPrefs.begin("bsec", false);
+    bsecPrefs.clear();
+    bsecPrefs.end();
+    delay(500);
+    ESP.restart();
+  }
+  if (pendingSaveSettings) {
+    pendingSaveSettings = false;
+    applyAndSaveSettings();
+  }
+  if (pendingRestart) {
+    pendingRestart = false;
+    Serial.println("Restart requested");
+    delay(500);
+    ESP.restart();
+  }
+}
+
+// =================== BOOT-button factory reset ===================
+// Read post-boot only (GPIO0 is a strapping pin — must NOT be low at reset).
+// A sustained low for FACTORY_RESET_HOLD_MS wipes WiFi creds.
+void checkBootButton() {
+  static unsigned long pressStart = 0;
+  static bool wasLow = false;
+  static bool fired = false;
+  bool low = (digitalRead(BOOT_BUTTON_PIN) == LOW);
+  if (low && !wasLow) { pressStart = millis(); wasLow = true; fired = false; }
+  else if (low && wasLow && !fired) {
+    if (millis() - pressStart >= FACTORY_RESET_HOLD_MS) {
+      fired = true;
+      pendingFactoryReset = true;
+    }
+  } else if (!low) {
+    wasLow = false;
+  }
+}
+
+// =================== setup ===================
+void setup() {
+  Serial.begin(115200);
+  delay(1500);
+  Serial.printf("\nenv-monitor-standalone v%s booting...\n", FW_VERSION);
+
+  // Watchdog first so everything below is protected.
+  esp_task_wdt_config_t wdtConfig = {.timeout_ms = WATCHDOG_TIMEOUT_MS, .idle_core_mask = 0, .trigger_panic = true};
+  esp_err_t wdtErr = esp_task_wdt_init(&wdtConfig);
+  if (wdtErr == ESP_ERR_INVALID_STATE) esp_task_wdt_reconfigure(&wdtConfig);
+  else if (wdtErr != ESP_OK) Serial.printf("WDT init returned %d (continuing)\n", wdtErr);
+  esp_task_wdt_add(NULL);
+
+  pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
+
+  initSensors();
+
+  // Stable device ID from MAC (eFuse-direct, no WiFi dependency).
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  char buf[16];
+  snprintf(buf, sizeof(buf), "qtpy_%02x%02x%02x", mac[3], mac[4], mac[5]);
+  deviceId = String(buf);
+
+  loadConfig();
+  Serial.printf("Device: %s  host: %s.local  unit: %c\n",
+                cfg.devName.c_str(), cfg.hostname.c_str(), cfg.unit);
+
+  // Decide mode: try STA if we have creds; otherwise (or on failure) portal.
+  if (cfg.ssid.length() > 0 && connectSTA()) {
+    startRun();
+    showUrlQrSplash();  // show dashboard URL/QR briefly, then readings take over
+    unsigned long splash = millis();
+    while (millis() - splash < 8000) { esp_task_wdt_reset(); delay(100); }
+    readSensors();
+    updateRunDisplay();
+    lastHistMs = millis();
+  } else {
+    startPortal();
+  }
+}
+
+// =================== loop ===================
+void loop() {
+  esp_task_wdt_reset();
+  ElegantOTA.loop();
+  checkBootButton();
+  handlePendingActions();
+
+  if (mode == MODE_PORTAL) {
+    dnsServer.processNextRequest();
+    static unsigned long lastPortalDraw = 0;
+    if (millis() - lastPortalDraw > 5000) { lastPortalDraw = millis(); showPortalScreen(); }
+    return;
+  }
+
+  // ---- MODE_RUN ----
+#if ENABLE_ARDUINO_OTA
+  ArduinoOTA.handle();
+#endif
+
+  if (bmeOK) {
+    if (!envSensor.run()) {
+      bool realError = ((int)envSensor.status < 0) || ((int)envSensor.sensor.status < 0);
+      if (realError) {
+        latest.bmeFailStreak++;
+        latest.bmeTotalFails++;
+        Serial.printf("BSEC run failed (streak=%u, total=%lu)\n",
+                      latest.bmeFailStreak, (unsigned long)latest.bmeTotalFails);
+        logBsecStatus("run");
+      }
+    }
+  }
+
+  // WiFi: trust auto-reconnect; force a full cycle if down too long.
+  if (WiFi.status() != WL_CONNECTED) {
+    if (millis() - lastWifiReconnect > WIFI_FORCE_RECONNECT_MS) {
+      lastWifiReconnect = millis();
+      Serial.println("WiFi still down — forcing reconnect");
+      WiFi.disconnect();
+      WiFi.begin(cfg.ssid.c_str(), cfg.pass.c_str());
+    }
+  } else {
+    lastWifiReconnect = millis();
+  }
+
+#if ENABLE_MQTT
+  if (!mqtt.connected() && millis() - lastMqttAttempt > MQTT_RETRY_MS) {
+    lastMqttAttempt = millis();
+    if (WiFi.status() == WL_CONNECTED) tryConnectMQTT();
+  }
+  if (mqtt.connected()) mqtt.loop();
+#endif
+
+  unsigned long now = millis();
+
+  // Per-sensor staleness (preserved).
+  bool hdcJustWentStale = false, bmeJustWentStale = false;
+  if (hdcOK && latest.hdcValid && (now - latest.hdcLastGoodMs > MAX_VALUE_AGE_MS)) {
+    Serial.println("HDC stale — marking offline");
+    hdcOK = false; latest.hdcValid = false; hdcJustWentStale = true;
+  }
+  if (bmeOK && latest.bmeValid && (now - latest.bmeLastGoodMs > MAX_VALUE_AGE_MS)) {
+    Serial.println("BME stale — marking offline");
+    bmeOK = false; latest.bmeValid = false; bmeJustWentStale = true;
+  }
+  if (hdcOK && latest.hdcFailStreak > MAX_FAIL_STREAK) {
+    Serial.printf("HDC failed %u reads — forcing reinit\n", latest.hdcFailStreak);
+    hdcOK = false; latest.hdcValid = false; latest.hdcFailStreak = 0; hdcJustWentStale = true;
+  }
+  if (bmeOK && latest.bmeFailStreak > MAX_FAIL_STREAK) {
+    Serial.printf("BME failed %u reads — forcing reinit\n", latest.bmeFailStreak);
+    bmeOK = false; latest.bmeValid = false; latest.bmeFailStreak = 0; bmeJustWentStale = true;
+  }
+  if (!hdcOK && (hdcJustWentStale || (now - lastHdcReinit >= SENSOR_REINIT_INTERVAL_MS))) {
+    lastHdcReinit = now; reinitHdc();
+  }
+  if (!bmeOK && (bmeJustWentStale || (now - lastBmeReinit >= SENSOR_REINIT_INTERVAL_MS))) {
+    lastBmeReinit = now; reinitBme();
+  }
+
+  unsigned long readInterval = displayOK ? READ_INTERVAL_DISPLAY_MS : READ_INTERVAL_HEADLESS_MS;
+  if (now - lastRead >= readInterval) {
+    lastRead = now;
+    readSensors();
+    updateRunDisplay();
+  }
+
+  if (now - lastHistMs >= HISTORY_INTERVAL_MS) {
+    lastHistMs = now;
+    recordHistory();
+  }
+
+#if ENABLE_MQTT
+  if (now - lastPublish >= PUBLISH_INTERVAL_MS && mqtt.connected()) {
+    lastPublish = now;
+    publishState();
+  }
+#endif
+
+  // Persist BSEC calibration once accuracy >= 1 (preserved).
+  if (bmeOK && latest.bmeIaqAccuracy >= 1) {
+    bool firstSave = !bsecStateSavedOnce;
+    bool cadenceDue = (now - lastBsecStateSave >= BSEC_STATE_SAVE_INTERVAL_MS);
+    if (firstSave || cadenceDue) {
+      lastBsecStateSave = now;
+      bsecStateSavedOnce = true;
+      saveBsecState();
+    }
+  }
+}
