@@ -141,6 +141,15 @@ small{color:#8493a8;display:block;margin-top:10px;line-height:1.4}
     <label for="sUnit">Temperature unit</label>
     <select id="sUnit"><option value="F">Fahrenheit (°F)</option><option value="C">Celsius (°C)</option></select>
     <label for="sHost">mDNS hostname (.local)</label><input id="sHost">
+    <label for="sBright">Display brightness</label>
+    <select id="sBright"><option value="8">Low (longest OLED life)</option><option value="64">Medium</option><option value="160">High</option><option value="255">Max</option></select>
+    <div class="row" style="margin-top:12px"><input id="sNight" type="checkbox"><label for="sNight" style="margin:0">Night mode — turn the screen off on a schedule</label></div>
+    <div class="row" style="gap:10px">
+      <div style="flex:1"><label for="sNStart">Off from (hour, 0–23)</label><input id="sNStart" type="number" min="0" max="23"></div>
+      <div style="flex:1"><label for="sNEnd">Back on at (hour)</label><input id="sNEnd" type="number" min="0" max="23"></div>
+    </div>
+    <label for="sUtc">UTC offset (hours) — needed for the night-mode clock</label>
+    <input id="sUtc" type="number" min="-12" max="14" step="1">
     <label for="sPass">Admin password (blank = keep current)</label>
     <input id="sPass" type="password" placeholder="protects updates &amp; settings" autocomplete="off">
     <div id="mqttBox" class="hide">
@@ -219,11 +228,18 @@ function loadHist(){fetch('/api/history').then(function(r){return r.json()}).the
 // settings
 function loadSettings(){fetch('/api/data').then(function(r){return r.json()}).then(function(d){
   $('sName').value=d.name||'';$('sUnit').value=d.unit||'F';$('sHost').value=d.hostname||'';
+  if(d.brightness!=null)$('sBright').value=d.brightness;
+  $('sNight').checked=!!d.night_en;
+  $('sNStart').value=(d.night_start!=null?d.night_start:23);
+  $('sNEnd').value=(d.night_end!=null?d.night_end:7);
+  $('sUtc').value=(d.utc_off!=null?d.utc_off:0);
   if(d.mqtt_enabled){$('mqttBox').classList.remove('hide');$('mHost').value=d.mqtt_host||'';$('mUser').value=d.mqtt_user||'';}
 });}
 $('save').onclick=function(){
   var b='name='+encodeURIComponent($('sName').value)+'&unit='+$('sUnit').value+
-        '&hostname='+encodeURIComponent($('sHost').value)+'&pass='+encodeURIComponent($('sPass').value);
+        '&hostname='+encodeURIComponent($('sHost').value)+'&pass='+encodeURIComponent($('sPass').value)+
+        '&brightness='+$('sBright').value+'&night_en='+($('sNight').checked?1:0)+
+        '&night_start='+$('sNStart').value+'&night_end='+$('sNEnd').value+'&utc_off='+$('sUtc').value;
   if(!$('mqttBox').classList.contains('hide'))
     b+='&mqtt_host='+encodeURIComponent($('mHost').value)+'&mqtt_user='+encodeURIComponent($('mUser').value)+'&mqtt_pass='+encodeURIComponent($('mPass').value);
   fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b})

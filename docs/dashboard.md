@@ -37,6 +37,13 @@ The less-essential and raw values, kept out of the main view:
 - **Device name** — shown in the header, on the OLED, and in the browser title.
 - **Temperature unit** — °F or °C (applies to the live readings and charts).
 - **mDNS hostname** — changes the `.local` address (applies after a restart).
+- **Display brightness** — Low / Medium / High / Max OLED contrast. Lower is
+  gentler on the panel and meaningfully extends its life; the default is Medium.
+- **Night mode** — turns the OLED fully off between the hours you set (e.g. off
+  23 → on 7), which saves the most panel life and keeps a bedroom dark. Needs
+  the **UTC offset** set so the device knows the local time (it syncs the clock
+  over the internet via NTP). Leave night mode off to keep the screen always on.
+  The dashboard and sensors keep running regardless of the screen state.
 - **Admin password** — protects firmware updates and settings. Leave blank to
   keep the current one. **Change the default (`airbox`) after first setup.**
 - **Firmware update** — opens the browser OTA uploader.
