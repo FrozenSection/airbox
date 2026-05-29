@@ -37,6 +37,21 @@
 #define DEFAULT_TEMP_UNIT    'F'             // 'F' or 'C'
 #define DEFAULT_ADMIN_PASS   "airbox"        // protects /update and Settings; CHANGE in UI
 
+// ----- OLED longevity (all overridable in the web Settings page) -----
+// SSD1306 contrast 0-255. Lower current = longer OLED life; the UI exposes
+// Low/Medium/High/Max. A moderate default is gentler than the panel's ~0xCF.
+#define DEFAULT_BRIGHTNESS   64
+// Night mode: blank the screen between these local hours (saves the most life,
+// and keeps a bedroom dark). Off by default; needs the UTC offset for the clock.
+#define DEFAULT_NIGHT_ENABLE 0
+#define DEFAULT_NIGHT_START  23              // hour 0-23, local
+#define DEFAULT_NIGHT_END    7
+#define DEFAULT_UTC_OFFSET_H 0               // local = UTC + this many hours (NTP)
+#define NTP_SERVER           "pool.ntp.org"
+// Anti-burn-in: nudge the whole layout a few px on this cycle so static labels
+// never sit on the same pixels forever.
+#define PIXEL_SHIFT_INTERVAL_MS  300000UL    // 5 minutes
+
 // ----- Trend history ring buffer -----
 // 288 samples @ 5 min spacing = 24 h of trend. 4 channels x 288 x 4 B ≈ 4.6 KB.
 #define HISTORY_SAMPLES        288

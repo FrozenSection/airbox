@@ -31,6 +31,7 @@
 #include <Preferences.h>
 #include <esp_mac.h>
 #include <esp_task_wdt.h>
+#include <time.h>
 extern "C" {
 #include <qrcode.h>  // ricmoo/QRCode is a C library — guard against name mangling
 }
@@ -127,6 +128,11 @@ struct Config {
   String hostname;
   String adminPass;
   char   unit;  // 'C' or 'F'
+  uint8_t brightness;   // SSD1306 contrast 0-255
+  bool    nightEn;      // blank the OLED on a schedule
+  uint8_t nightStart;   // local hour 0-23
+  uint8_t nightEnd;
+  int8_t  utcOffsetH;   // local = UTC + this (for the night-mode clock)
 #if ENABLE_MQTT
   String mqttHost;
   String mqttUser;
@@ -158,6 +164,7 @@ volatile bool pendingFactoryReset = false;
 // Staging buffers for the above (written in handlers, read in loop()).
 String stgSsid, stgWifiPass;
 String stgName, stgUnit, stgHost, stgPass;
+String stgBright, stgNight, stgNStart, stgNEnd, stgUtc;
 #if ENABLE_MQTT
 String stgMqttHost, stgMqttUser, stgMqttPass;
 #endif
@@ -197,6 +204,11 @@ void loadConfig() {
   cfg.hostname  = cfgPrefs.getString("host", DEFAULT_HOSTNAME);
   cfg.adminPass = cfgPrefs.getString("admin", DEFAULT_ADMIN_PASS);
   cfg.unit      = cfgPrefs.getString("unit", String(DEFAULT_TEMP_UNIT))[0];
+  cfg.brightness = cfgPrefs.getUChar("bright", DEFAULT_BRIGHTNESS);
+  cfg.nightEn    = cfgPrefs.getBool("nightEn", DEFAULT_NIGHT_ENABLE);
+  cfg.nightStart = cfgPrefs.getUChar("nStart", DEFAULT_NIGHT_START);
+  cfg.nightEnd   = cfgPrefs.getUChar("nEnd", DEFAULT_NIGHT_END);
+  cfg.utcOffsetH = cfgPrefs.getChar("utc", DEFAULT_UTC_OFFSET_H);
 #if ENABLE_MQTT
   cfg.mqttHost  = cfgPrefs.getString("mhost", "");
   cfg.mqttUser  = cfgPrefs.getString("muser", "");
@@ -222,17 +234,29 @@ void clearWifiCreds() {
   cfgPrefs.end();
 }
 
+void setContrast(uint8_t v);  // defined with the OLED rendering helpers
+
 void applyAndSaveSettings() {
   if (stgName.length()) cfg.devName = stgName;
   if (stgUnit.length()) cfg.unit = stgUnit[0];
   if (stgHost.length()) cfg.hostname = stgHost;
   if (stgPass.length()) cfg.adminPass = stgPass;  // blank = keep current
   if (cfg.unit != 'C' && cfg.unit != 'F') cfg.unit = DEFAULT_TEMP_UNIT;
+  if (stgBright.length()) cfg.brightness = (uint8_t)stgBright.toInt();
+  if (stgNight.length())  cfg.nightEn = (stgNight.toInt() != 0);
+  if (stgNStart.length()) cfg.nightStart = (uint8_t)constrain(stgNStart.toInt(), 0, 23);
+  if (stgNEnd.length())   cfg.nightEnd = (uint8_t)constrain(stgNEnd.toInt(), 0, 23);
+  if (stgUtc.length())    cfg.utcOffsetH = (int8_t)constrain(stgUtc.toInt(), -12, 14);
   cfgPrefs.begin("cfg", false);
   cfgPrefs.putString("name", cfg.devName);
   cfgPrefs.putString("unit", String(cfg.unit));
   cfgPrefs.putString("host", cfg.hostname);
   cfgPrefs.putString("admin", cfg.adminPass);
+  cfgPrefs.putUChar("bright", cfg.brightness);
+  cfgPrefs.putBool("nightEn", cfg.nightEn);
+  cfgPrefs.putUChar("nStart", cfg.nightStart);
+  cfgPrefs.putUChar("nEnd", cfg.nightEnd);
+  cfgPrefs.putChar("utc", cfg.utcOffsetH);
 #if ENABLE_MQTT
   if (stgMqttHost.length()) cfg.mqttHost = stgMqttHost;
   if (stgMqttUser.length()) cfg.mqttUser = stgMqttUser;
@@ -242,6 +266,9 @@ void applyAndSaveSettings() {
   cfgPrefs.putString("mpass", cfg.mqttPass);
 #endif
   cfgPrefs.end();
+  // Apply the display + clock changes live (we're in loop() context).
+  if (displayOK) setContrast(cfg.brightness);
+  configTime((long)cfg.utcOffsetH * 3600, 0, NTP_SERVER);
   Serial.println("Settings saved");
 }
 
@@ -414,6 +441,38 @@ void recordHistory() {
 }
 
 // =================== OLED rendering ===================
+// ----- OLED longevity: contrast, pixel-shift jitter, night blanking -----
+bool displayPowered = true;
+int  shiftX = 0, shiftY = 0;  // applied to every run-screen coordinate
+unsigned long lastShift = 0;
+const int8_t SHIFT_SEQ[][2] = {{0, 0}, {2, 1}, {1, 2}, {2, 2}, {0, 1}, {1, 0}};
+uint8_t shiftIdx = 0;
+
+void setContrast(uint8_t v) {
+  display.ssd1306_command(SSD1306_SETCONTRAST);
+  display.ssd1306_command(v);
+}
+void updateShift() {
+  shiftIdx = (shiftIdx + 1) % (sizeof(SHIFT_SEQ) / sizeof(SHIFT_SEQ[0]));
+  shiftX = SHIFT_SEQ[shiftIdx][0];
+  shiftY = SHIFT_SEQ[shiftIdx][1];
+}
+void setDisplayPower(bool on) {
+  if (!displayOK || on == displayPowered) return;
+  display.ssd1306_command(on ? SSD1306_DISPLAYON : SSD1306_DISPLAYOFF);
+  displayPowered = on;
+}
+static bool timeSynced() { return time(nullptr) > 1700000000; }  // ~Nov 2023+
+bool isNightNow() {
+  if (!cfg.nightEn || cfg.nightStart == cfg.nightEnd || !timeSynced()) return false;
+  time_t now = time(nullptr);
+  struct tm t;
+  localtime_r(&now, &t);
+  int h = t.tm_hour;
+  if (cfg.nightStart < cfg.nightEnd) return (h >= cfg.nightStart && h < cfg.nightEnd);
+  return (h >= cfg.nightStart || h < cfg.nightEnd);  // window wraps midnight
+}
+
 // Draw a QR code (text encoded) as filled rects. Version 3 (29 modules) at
 // scale 2 = 58 px — fits the 64 px-tall screen. ECC_LOW keeps short strings
 // (open-AP join string, short URL) within a v3 buffer.
@@ -466,30 +525,31 @@ void showUrlQrSplash() {
 }
 
 void updateRunDisplay() {
-  if (!displayOK) return;
+  if (!displayOK || !displayPowered) return;  // skip while night-blanked
+  const int sx = shiftX, sy = shiftY;         // anti-burn-in offset (0-2 px)
   display.clearDisplay();
   display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.print(cfg.devName.substring(0, 16));
-  display.setCursor(110, 0);
+  display.setCursor(sx, sy);
+  display.print(cfg.devName.substring(0, 15));
+  display.setCursor(108 + sx, sy);
   display.print(WiFi.status() == WL_CONNECTED ? "W" : "-");
-  display.drawFastHLine(0, 9, SCREEN_WIDTH, SSD1306_WHITE);
+  display.drawFastHLine(sx, 9 + sy, SCREEN_WIDTH - 4, SSD1306_WHITE);
 
   if (hdcOK && latest.hdcValid) {
     display.setTextSize(2);
-    display.setCursor(0, 14);
+    display.setCursor(sx, 14 + sy);
     display.printf("%.1f%c", toUnit(latest.hdcTempC), cfg.unit);
-    display.setCursor(74, 14);
+    display.setCursor(74 + sx, 14 + sy);
     display.printf("%.0f%%", latest.hdcRH);
   }
   display.setTextSize(1);
   if (bmeOK && latest.bmeValid) {
-    display.setCursor(0, 36);
+    display.setCursor(sx, 36 + sy);
     display.printf("Pres:%.1f hPa", latest.bmePresHpa);
-    display.setCursor(0, 46);
+    display.setCursor(sx, 46 + sy);
     display.printf("IAQ :%.0f acc:%u", latest.bmeIaq, latest.bmeIaqAccuracy);
   }
-  display.setCursor(0, 56);
+  display.setCursor(sx, 54 + sy);  // base 54 (+2 shift) keeps footer on-screen
   display.print(cfg.hostname + ".local");
   display.display();
 }
@@ -501,6 +561,11 @@ void buildDataJson(JsonDocument& doc) {
   doc["hostname"] = cfg.hostname;
   doc["unit"] = String(cfg.unit);
   doc["fw"] = FW_VERSION;
+  doc["brightness"] = cfg.brightness;
+  doc["night_en"] = cfg.nightEn;
+  doc["night_start"] = cfg.nightStart;
+  doc["night_end"] = cfg.nightEnd;
+  doc["utc_off"] = cfg.utcOffsetH;
   if (hdcOK && s.hdcValid) {
     doc["temp"] = toUnit(s.hdcTempC);
     doc["rh"] = s.hdcRH;
@@ -571,6 +636,8 @@ void registerRunRoutes() {
       return req->hasParam(k, true) ? req->getParam(k, true)->value() : String("");
     };
     stgName = P("name"); stgUnit = P("unit"); stgHost = P("hostname"); stgPass = P("pass");
+    stgBright = P("brightness"); stgNight = P("night_en");
+    stgNStart = P("night_start"); stgNEnd = P("night_end"); stgUtc = P("utc_off");
 #if ENABLE_MQTT
     stgMqttHost = P("mqtt_host"); stgMqttUser = P("mqtt_user"); stgMqttPass = P("mqtt_pass");
 #endif
@@ -859,6 +926,8 @@ void startRun() {
   setupElegantOTA();
   server.begin();
   MDNS.addService("http", "tcp", 80);
+  // NTP for the night-mode clock (harmless if night mode stays off).
+  configTime((long)cfg.utcOffsetH * 3600, 0, NTP_SERVER);
 #if ENABLE_ARDUINO_OTA
   setupArduinoOTA();
 #endif
@@ -953,6 +1022,7 @@ void setup() {
   deviceId = String(buf);
 
   loadConfig();
+  if (displayOK) setContrast(cfg.brightness);  // apply saved brightness early
   Serial.printf("Device: %s  host: %s.local  unit: %c\n",
                 cfg.devName.c_str(), cfg.hostname.c_str(), cfg.unit);
 
@@ -1047,6 +1117,17 @@ void loop() {
   }
   if (!bmeOK && (bmeJustWentStale || (now - lastBmeReinit >= SENSOR_REINIT_INTERVAL_MS))) {
     lastBmeReinit = now; reinitBme();
+  }
+
+  // OLED care: night blanking + anti-burn-in pixel-shift.
+  if (displayOK) {
+    bool wasPowered = displayPowered;
+    setDisplayPower(!isNightNow());
+    if (displayPowered && !wasPowered) updateRunDisplay();  // redraw on wake
+    if (displayPowered && now - lastShift >= PIXEL_SHIFT_INTERVAL_MS) {
+      lastShift = now;
+      updateShift();
+    }
   }
 
   unsigned long readInterval = displayOK ? READ_INTERVAL_DISPLAY_MS : READ_INTERVAL_HEADLESS_MS;
