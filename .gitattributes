@@ -1,0 +1,12 @@
+# Normalize line endings
+* text=auto
+
+# Treat firmware/3D binaries as binary (no diff/merge munging)
+*.bin binary
+*.hex binary
+*.elf binary
+*.stl binary
+*.step binary
+*.stp binary
+*.3mf binary
+*.f3d binary
