@@ -18,7 +18,7 @@
 const char PORTAL_HTML[] PROGMEM = R"=====(<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Env Monitor — WiFi Setup</title>
+<title>AirBox — WiFi Setup</title>
 <style>
 :root{color-scheme:dark}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#11151c;color:#e6edf3;margin:0;padding:18px;max-width:520px;margin:0 auto}
@@ -33,7 +33,7 @@ button.alt{background:#33405a;margin-top:8px}
 small{color:#8493a8;display:block;margin-top:8px;line-height:1.4}
 #msg{margin-top:10px;font-size:.95rem}
 </style></head><body>
-<h1>📡 Env Monitor — WiFi Setup</h1>
+<h1>📡 AirBox — WiFi Setup</h1>
 <div class="card">
   <label for="net">Your WiFi network</label>
   <select id="net"><option>Scanning…</option></select>
@@ -82,7 +82,7 @@ load();
 const char INDEX_HTML[] PROGMEM = R"=====(<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Env Monitor</title>
+<title>AirBox</title>
 <style>
 :root{color-scheme:dark}
 *{box-sizing:border-box}
@@ -114,7 +114,7 @@ small{color:#8493a8;display:block;margin-top:10px;line-height:1.4}
 #stamp{font-size:.75rem;color:#6e7d90}
 </style></head><body>
 <header>
-  <h1 id="name">Env Monitor</h1>
+  <h1 id="name">AirBox</h1>
   <div><span class="dot" id="conn"></span><span id="stamp">—</span></div>
 </header>
 <div class="tabs">
@@ -157,7 +157,7 @@ small{color:#8493a8;display:block;margin-top:10px;line-height:1.4}
     <button class="act b-red" id="restart">Restart device</button>
     <small>Recalibrate clears the BSEC baseline — IAQ accuracy drops to 0 and
     re-learns over 24–48 h. Reconfigure WiFi reboots into the setup portal
-    (you'll rejoin “EnvMon-Setup” to pick a new network).</small>
+    (you'll rejoin “AirBox-Setup” to pick a new network).</small>
   </div></section>
 </main>
 <script>
@@ -196,7 +196,7 @@ function redrawCharts(){if(!hist)return;
 function poll(){fetch('/api/data').then(function(r){return r.json()}).then(function(d){
   $('conn').classList.toggle('bad',!(d.hdc_ok||d.bme_ok));
   $('stamp').textContent='updated '+new Date().toLocaleTimeString();
-  $('name').textContent=d.name||'Env Monitor';document.title=d.name||'Env Monitor';
+  $('name').textContent=d.name||'AirBox';document.title=d.name||'AirBox';
   unit=d.unit||'F';$('tu').textContent='°'+unit;
   $('temp').textContent=fmt(d.temp);$('rh').textContent=fmt(d.rh,0);
   $('pres').textContent=fmt(d.pressure);$('iaq').textContent=fmt(d.iaq,0);

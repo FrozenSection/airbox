@@ -1,4 +1,4 @@
-# Firmware — env-monitor-standalone
+# Firmware — AirBox
 
 Arduino sketch for the Adafruit QT Py ESP32-S3 standalone environmental
 monitor. Reads a BME688 (via Bosch BSEC2) and an HDC3022, serves a local web
@@ -36,22 +36,22 @@ the ESP32 core — no separate install.
 
 ## Build flags (`config.h`)
 
-Everything tunable lives in [`env-monitor-standalone/config.h`](env-monitor-standalone/config.h).
+Everything tunable lives in [`airbox/config.h`](airbox/config.h).
 No secrets are stored in source — WiFi credentials, the admin/OTA password,
 and optional MQTT settings are entered in the web UI and saved to NVS.
 
 - `ENABLE_MQTT` (default `0`) — also push to an MQTT broker / Home Assistant.
 - `ENABLE_ARDUINO_OTA` (default `0`) — network flashing from the IDE/PlatformIO.
-- `DEFAULT_ADMIN_PASS` (`"envmon"`) — initial password for OTA + Settings.
+- `DEFAULT_ADMIN_PASS` (`"airbox"`) — initial password for OTA + Settings.
   **Change it in the dashboard Settings page after first boot.**
 
 ## First flash
 
-1. Open `env-monitor-standalone/env-monitor-standalone.ino` in Arduino IDE.
+1. Open `airbox/airbox.ino` in Arduino IDE.
 2. Select the board + partition scheme above, install the libraries.
 3. Upload over USB-C.
 4. On first boot the device has no WiFi credentials → it starts the
-   **EnvMon-Setup** access point. Follow [docs/first-time-setup.md](../docs/first-time-setup.md).
+   **AirBox-Setup** access point. Follow [docs/first-time-setup.md](../docs/first-time-setup.md).
 
 After the first flash, firmware updates can be done entirely in the browser at
 `http://<hostname>.local/update` (no cable needed).

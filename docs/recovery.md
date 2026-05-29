@@ -8,7 +8,7 @@ fully physical.
 
 If the saved network is gone, renamed, or has a new password, the device tries
 to connect for ~30 seconds at boot and then **automatically falls back to the
-`EnvMon-Setup` portal**. Just redo [first-time setup](first-time-setup.md).
+`AirBox-Setup` portal**. Just redo [first-time setup](first-time-setup.md).
 You don't have to do anything to trigger this.
 
 ## 2. Reconfigure from the dashboard
@@ -16,9 +16,9 @@ You don't have to do anything to trigger this.
 If you can still reach the dashboard and simply want to move it to a different
 network:
 
-1. Open `http://envmon.local` → **Settings** tab.
+1. Open `http://airbox.local` → **Settings** tab.
 2. Tap **Reconfigure WiFi** and confirm.
-3. The device reboots into the `EnvMon-Setup` portal — rejoin it and pick the
+3. The device reboots into the `AirBox-Setup` portal — rejoin it and pick the
    new network.
 
 ## 3. Physical reset — hold BOOT (always works)
@@ -27,7 +27,7 @@ If the dashboard is unreachable (forgotten which network, IP changed, etc.):
 
 1. With the device powered and running, **press and hold the BOOT button for
    about 3 seconds.**
-2. It wipes the saved WiFi credentials and reboots into the `EnvMon-Setup`
+2. It wipes the saved WiFi credentials and reboots into the `AirBox-Setup`
    portal.
 
 > Press BOOT **after** the device has booted — don't hold it during power-up
@@ -51,7 +51,7 @@ sensor** on the dashboard. IAQ accuracy drops to 0 and re-learns over 24–48 h.
 ## Updating firmware
 
 - **Browser (normal):** Settings → **Firmware update**, or go to
-  `http://envmon.local/update`. Log in with username `admin` and your admin
+  `http://airbox.local/update`. Log in with username `admin` and your admin
   password, then upload the new `.bin`. The device reboots automatically.
 - **USB:** re-flash from the Arduino IDE over USB-C any time.
 

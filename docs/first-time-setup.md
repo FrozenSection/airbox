@@ -6,9 +6,9 @@ it starts a temporary setup hotspot so you can tell it which network to join.
 ## The quick way (with the OLED)
 
 1. **Power the device.** After a few seconds the OLED shows **"WiFi Setup"**,
-   the hotspot name **`EnvMon-Setup`**, and a **QR code**.
+   the hotspot name **`AirBox-Setup`**, and a **QR code**.
 2. **Point your phone camera at the QR code.** It offers to join the
-   `EnvMon-Setup` network — tap to join. (The setup hotspot is open/passwordless
+   `AirBox-Setup` network — tap to join. (The setup hotspot is open/passwordless
    on purpose, so the QR stays crisp on the small screen. It only ever serves
    the setup page.)
 3. Your phone should **automatically pop up the setup page**. If it doesn't,
@@ -20,19 +20,19 @@ it starts a temporary setup hotspot so you can tell it which network to join.
 ## The manual way (no OLED, or QR won't scan)
 
 1. On your phone or laptop, open WiFi settings and join the network
-   **`EnvMon-Setup`**.
+   **`AirBox-Setup`**.
 2. A captive-portal page should appear automatically. If not, browse to
    **`http://192.168.4.1`**.
 3. Select your network, enter the password, **Connect**.
 
 ## After setup
 
-- Open the dashboard at **`http://envmon.local`** (or scan the QR shown on the
+- Open the dashboard at **`http://airbox.local`** (or scan the QR shown on the
   OLED, or use the IP address your router assigned).
 - Go to the **Settings** tab and:
   - set a **device name** (e.g. "Office", "Nursery"),
   - choose **°F or °C**,
-  - **change the admin password** (default is `envmon`) — this protects
+  - **change the admin password** (default is `airbox`) — this protects
     firmware updates and settings changes.
 
 > **Air-quality calibration:** the IAQ reading starts at accuracy 0 and
@@ -41,11 +41,11 @@ it starts a temporary setup hotspot so you can tell it which network to join.
 
 ## Acceptance checklist
 
-- [ ] Fresh boot shows the `EnvMon-Setup` hotspot (and QR on the OLED).
+- [ ] Fresh boot shows the `AirBox-Setup` hotspot (and QR on the OLED).
 - [ ] Phone scans the QR, joins, and the setup page appears automatically.
 - [ ] Network list populates; selecting your WiFi and submitting reboots the
       device onto your network.
-- [ ] `http://envmon.local` loads the dashboard; live values update.
+- [ ] `http://airbox.local` loads the dashboard; live values update.
 - [ ] Trend charts begin filling in (first points appear after a few minutes).
 - [ ] °F/°C toggle and device name persist across a reboot.
 - [ ] Browser OTA at `/update` accepts the admin password and flashes a new
