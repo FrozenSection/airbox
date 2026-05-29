@@ -41,11 +41,14 @@
 // SSD1306 contrast 0-255. Lower current = longer OLED life; the UI exposes
 // Low/Medium/High/Max. A moderate default is gentler than the panel's ~0xCF.
 #define DEFAULT_BRIGHTNESS   64
-// Night mode: blank the screen between these local hours (saves the most life,
-// and keeps a bedroom dark). Off by default; needs the UTC offset for the clock.
+// Night mode: between these local hours, either fully blank the screen (saves
+// the most life, keeps a bedroom dark) or just dim it. Off by default; needs
+// the UTC offset for the clock.
 #define DEFAULT_NIGHT_ENABLE 0
 #define DEFAULT_NIGHT_START  23              // hour 0-23, local
 #define DEFAULT_NIGHT_END    7
+#define DEFAULT_NIGHT_MODE   0               // 0 = blank (screen off), 1 = dim
+#define NIGHT_DIM_CONTRAST   4               // SSD1306 contrast used in dim mode (very low)
 #define DEFAULT_UTC_OFFSET_H 0               // local = UTC + this many hours (NTP)
 #define NTP_SERVER           "pool.ntp.org"
 // Anti-burn-in: nudge the whole layout a few px on this cycle so static labels

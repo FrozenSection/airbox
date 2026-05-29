@@ -129,9 +129,10 @@ struct Config {
   String adminPass;
   char   unit;  // 'C' or 'F'
   uint8_t brightness;   // SSD1306 contrast 0-255
-  bool    nightEn;      // blank the OLED on a schedule
+  bool    nightEn;      // blank/dim the OLED on a schedule
   uint8_t nightStart;   // local hour 0-23
   uint8_t nightEnd;
+  uint8_t nightMode;    // 0 = blank (off), 1 = dim
   int8_t  utcOffsetH;   // local = UTC + this (for the night-mode clock)
 #if ENABLE_MQTT
   String mqttHost;
@@ -164,7 +165,7 @@ volatile bool pendingFactoryReset = false;
 // Staging buffers for the above (written in handlers, read in loop()).
 String stgSsid, stgWifiPass;
 String stgName, stgUnit, stgHost, stgPass;
-String stgBright, stgNight, stgNStart, stgNEnd, stgUtc;
+String stgBright, stgNight, stgNStart, stgNEnd, stgNMode, stgUtc;
 #if ENABLE_MQTT
 String stgMqttHost, stgMqttUser, stgMqttPass;
 #endif
@@ -208,6 +209,7 @@ void loadConfig() {
   cfg.nightEn    = cfgPrefs.getBool("nightEn", DEFAULT_NIGHT_ENABLE);
   cfg.nightStart = cfgPrefs.getUChar("nStart", DEFAULT_NIGHT_START);
   cfg.nightEnd   = cfgPrefs.getUChar("nEnd", DEFAULT_NIGHT_END);
+  cfg.nightMode  = cfgPrefs.getUChar("nMode", DEFAULT_NIGHT_MODE);
   cfg.utcOffsetH = cfgPrefs.getChar("utc", DEFAULT_UTC_OFFSET_H);
 #if ENABLE_MQTT
   cfg.mqttHost  = cfgPrefs.getString("mhost", "");
@@ -246,6 +248,7 @@ void applyAndSaveSettings() {
   if (stgNight.length())  cfg.nightEn = (stgNight.toInt() != 0);
   if (stgNStart.length()) cfg.nightStart = (uint8_t)constrain(stgNStart.toInt(), 0, 23);
   if (stgNEnd.length())   cfg.nightEnd = (uint8_t)constrain(stgNEnd.toInt(), 0, 23);
+  if (stgNMode.length())  cfg.nightMode = (stgNMode.toInt() != 0) ? 1 : 0;
   if (stgUtc.length())    cfg.utcOffsetH = (int8_t)constrain(stgUtc.toInt(), -12, 14);
   cfgPrefs.begin("cfg", false);
   cfgPrefs.putString("name", cfg.devName);
@@ -256,6 +259,7 @@ void applyAndSaveSettings() {
   cfgPrefs.putBool("nightEn", cfg.nightEn);
   cfgPrefs.putUChar("nStart", cfg.nightStart);
   cfgPrefs.putUChar("nEnd", cfg.nightEnd);
+  cfgPrefs.putUChar("nMode", cfg.nightMode);
   cfgPrefs.putChar("utc", cfg.utcOffsetH);
 #if ENABLE_MQTT
   if (stgMqttHost.length()) cfg.mqttHost = stgMqttHost;
@@ -443,14 +447,17 @@ void recordHistory() {
 // =================== OLED rendering ===================
 // ----- OLED longevity: contrast, pixel-shift jitter, night blanking -----
 bool displayPowered = true;
+int  activeContrast = -1;     // currently-applied contrast (-1 = unset)
 int  shiftX = 0, shiftY = 0;  // applied to every run-screen coordinate
 unsigned long lastShift = 0;
 const int8_t SHIFT_SEQ[][2] = {{0, 0}, {2, 1}, {1, 2}, {2, 2}, {0, 1}, {1, 0}};
 uint8_t shiftIdx = 0;
 
 void setContrast(uint8_t v) {
+  if ((int)v == activeContrast) return;
   display.ssd1306_command(SSD1306_SETCONTRAST);
   display.ssd1306_command(v);
+  activeContrast = v;
 }
 void updateShift() {
   shiftIdx = (shiftIdx + 1) % (sizeof(SHIFT_SEQ) / sizeof(SHIFT_SEQ[0]));
@@ -565,6 +572,7 @@ void buildDataJson(JsonDocument& doc) {
   doc["night_en"] = cfg.nightEn;
   doc["night_start"] = cfg.nightStart;
   doc["night_end"] = cfg.nightEnd;
+  doc["night_mode"] = cfg.nightMode;
   doc["utc_off"] = cfg.utcOffsetH;
   if (hdcOK && s.hdcValid) {
     doc["temp"] = toUnit(s.hdcTempC);
@@ -637,7 +645,8 @@ void registerRunRoutes() {
     };
     stgName = P("name"); stgUnit = P("unit"); stgHost = P("hostname"); stgPass = P("pass");
     stgBright = P("brightness"); stgNight = P("night_en");
-    stgNStart = P("night_start"); stgNEnd = P("night_end"); stgUtc = P("utc_off");
+    stgNStart = P("night_start"); stgNEnd = P("night_end");
+    stgNMode = P("night_mode"); stgUtc = P("utc_off");
 #if ENABLE_MQTT
     stgMqttHost = P("mqtt_host"); stgMqttUser = P("mqtt_user"); stgMqttPass = P("mqtt_pass");
 #endif
@@ -1119,10 +1128,13 @@ void loop() {
     lastBmeReinit = now; reinitBme();
   }
 
-  // OLED care: night blanking + anti-burn-in pixel-shift.
+  // OLED care: night blank/dim + anti-burn-in pixel-shift.
   if (displayOK) {
+    bool night = isNightNow();
     bool wasPowered = displayPowered;
-    setDisplayPower(!isNightNow());
+    // BLANK mode powers the panel off; DIM mode keeps it on at low contrast.
+    setDisplayPower(!(night && cfg.nightMode == 0));
+    setContrast((night && cfg.nightMode == 1) ? NIGHT_DIM_CONTRAST : cfg.brightness);
     if (displayPowered && !wasPowered) updateRunDisplay();  // redraw on wake
     if (displayPowered && now - lastShift >= PIXEL_SHIFT_INTERVAL_MS) {
       lastShift = now;
