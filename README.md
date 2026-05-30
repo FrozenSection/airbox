@@ -64,6 +64,11 @@ Contributions and remixes welcome.
 
 ## Acknowledgments
 
-Forked from a Home Assistant MQTT sensor and rebuilt as a standalone device.
-The firmware refactor, captive-portal provisioning, web dashboard, and
-documentation were developed with the help of Anthropic's Claude (Claude Code).
+For honesty about how this was built: the firmware, captive-portal provisioning,
+web dashboard, and documentation were **written by Anthropic's Claude** (via
+Claude Code), working from the requirements, design decisions, hardware testing,
+and review provided by the repo owner. The code is AI-written under human
+direction — not hand-coded by the owner.
+
+(Forked from an earlier Home Assistant MQTT sensor and rebuilt as a standalone
+device.)
