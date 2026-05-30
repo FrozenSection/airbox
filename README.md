@@ -61,3 +61,9 @@ docs/        setup, dashboard, and recovery guides
   [`hardware/LICENSE`](hardware/LICENSE).
 
 Contributions and remixes welcome.
+
+## Acknowledgments
+
+Forked from a Home Assistant MQTT sensor and rebuilt as a standalone device.
+The firmware refactor, captive-portal provisioning, web dashboard, and
+documentation were developed with the help of Anthropic's Claude (Claude Code).
