@@ -31,8 +31,7 @@ Leave blank, or set it to `http://airbox.local` as a hint (it isn't a public URL
 
 ## Acknowledgment
 
-Claude's involvement is recorded two ways already:
-- `Co-Authored-By: Claude ...` trailers on the commits (GitHub shows co-authors).
-- An **Acknowledgments** section in the [README](README.md).
-
-Nothing is *required* — attribution is optional and at your discretion.
+The README's **Acknowledgments** section states plainly that the code was
+AI-written (Anthropic's Claude) under the owner's direction — so it's clear the
+owner didn't hand-code it. It's also recorded in the commit history via
+`Co-Authored-By: Claude ...` trailers (GitHub shows co-authors).
