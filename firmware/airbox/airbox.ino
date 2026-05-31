@@ -650,52 +650,68 @@ void showUrlQrSplash() {
 
 void updateRunDisplay() {
   if (!displayOK || !displayPowered) return;  // skip while night-blanked
-  // Anti-burn-in offset (0-2 px). The base layout is inset ~2 px on every edge
-  // so worst-case (+2,+2) never clips. Char buffers (not String) avoid heap
-  // churn on the periodic redraw.
+  // Two big data rows for legibility on the 0.96" screen: temp+humidity, then
+  // pressure+IAQ (numbers size 2, units size 1). Calibration accuracy lives in
+  // the web UI only. Anti-burn-in offset (0-2 px) shifts the whole layout.
   const int ox = shiftX, oy = shiftY;
+  bool hdcGood = hdcOK && latest.hdcValid;
+  bool bmeGood = bmeOK && latest.bmeValid;
+  bool stale   = !hdcGood || !bmeGood;
+  bool wifiUp  = (WiFi.status() == WL_CONNECTED);
+
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
 
-  // ---- Header: device name + firmware version + WiFi status dot ----
+  // ---- Header (size 1): name | version-or-STALE | status dot ----
   display.setTextSize(1);
-  char nameBuf[16];
-  snprintf(nameBuf, sizeof(nameBuf), "%s", cfg.devName.c_str());
-  display.setCursor(2 + ox, 2 + oy);
+  char nameBuf[12];
+  snprintf(nameBuf, sizeof(nameBuf), "%.9s", cfg.devName.c_str());
+  display.setCursor(ox, oy);
   display.print(nameBuf);
-  char verBuf[12];
-  snprintf(verBuf, sizeof(verBuf), "v%s", FW_VERSION);
-  int verX = 114 - (int)(strlen(verBuf) * 6);  // 6 px/char @ size 1, right of the dot
-  display.setCursor(verX + ox, 2 + oy);
-  display.print(verBuf);
-  if (WiFi.status() == WL_CONNECTED) display.fillCircle(121 + ox, 5 + oy, 3, SSD1306_WHITE);
-  else                              display.drawCircle(121 + ox, 5 + oy, 3, SSD1306_WHITE);
-  display.drawFastHLine(2 + ox, 12 + oy, 124, SSD1306_WHITE);
+  char rbuf[12];
+  if (stale) snprintf(rbuf, sizeof(rbuf), "STALE");          // unmistakable on-device alert
+  else       snprintf(rbuf, sizeof(rbuf), "v%s", FW_VERSION);
+  display.setCursor(114 - (int)strlen(rbuf) * 6 + ox, oy);
+  display.print(rbuf);
+  // Dot filled only when everything is healthy (WiFi + both sensors fresh), so a
+  // solid dot can no longer mean "connected but no data".
+  if (wifiUp && !stale) display.fillCircle(122 + ox, 3 + oy, 3, SSD1306_WHITE);
+  else                  display.drawCircle(122 + ox, 3 + oy, 3, SSD1306_WHITE);
+  display.drawFastHLine(ox, 11 + oy, SCREEN_WIDTH - 4, SSD1306_WHITE);
 
-  // ---- Headline: HDC temperature + humidity (size 2). Placeholders keep the
-  // layout stable before the first valid read. RH is right-aligned (base right
-  // edge x=120) so it stays anchored regardless of 2- vs 3-digit value. ----
+  // ---- Row 1 (size 2): temperature (left) + humidity (right-aligned) ----
   display.setTextSize(2);
-  display.setCursor(2 + ox, 16 + oy);
-  if (hdcOK && latest.hdcValid) display.printf("%.1f%c", toUnit(latest.hdcTempC), cfg.unit);
-  else                          display.printf("--.-%c", cfg.unit);
-  char rhBuf[8];
-  if (hdcOK && latest.hdcValid) snprintf(rhBuf, sizeof(rhBuf), "%.0f%%", latest.hdcRH);
-  else                          snprintf(rhBuf, sizeof(rhBuf), "--%%");
-  int rhX = 120 - (int)(strlen(rhBuf) * 12);  // 12 px/char @ size 2
-  display.setCursor(rhX + ox, 16 + oy);
-  display.print(rhBuf);
-  display.drawFastHLine(2 + ox, 35 + oy, 124, SSD1306_WHITE);
+  display.setCursor(ox, 15 + oy);
+  if (hdcGood) display.printf("%.1f%c", toUnit(latest.hdcTempC), cfg.unit);
+  else         display.printf("--.-%c", cfg.unit);
+  char rh[8];
+  if (hdcGood) snprintf(rh, sizeof(rh), "%.0f%%", latest.hdcRH);
+  else         snprintf(rh, sizeof(rh), "--%%");
+  display.setCursor(SCREEN_WIDTH - (int)strlen(rh) * 12 - 4 + ox, 15 + oy);
+  display.print(rh);
 
-  // ---- Secondary: BME pressure + IAQ, stacked (size 1). IAQ stays numeric
-  // (value + calibration accuracy) — no qualitative band, by design. ----
+  // ---- Row 2: pressure (big number + small hPa) + IAQ (small label + big) ----
+  char pb[8];
+  if (bmeGood) snprintf(pb, sizeof(pb), "%.0f", latest.bmePresHpa);
+  else         snprintf(pb, sizeof(pb), "--");
+  display.setTextSize(2);
+  display.setCursor(ox, 40 + oy);
+  display.print(pb);
   display.setTextSize(1);
-  display.setCursor(2 + ox, 40 + oy);
-  if (bmeOK && latest.bmeValid) display.printf("Pres %.0f hPa", latest.bmePresHpa);
-  else                          display.print("Pres --- hPa");
-  display.setCursor(2 + ox, 52 + oy);
-  if (bmeOK && latest.bmeValid) display.printf("IAQ  %.0f  acc%u", latest.bmeIaq, latest.bmeIaqAccuracy);
-  else                          display.print("IAQ  --");
+  display.setCursor(ox + (int)strlen(pb) * 12 + 2, 46 + oy);
+  display.print("hPa");
+
+  char ib[6];
+  if (bmeGood) snprintf(ib, sizeof(ib), "%.0f", latest.bmeIaq);
+  else         snprintf(ib, sizeof(ib), "--");
+  int ivX = SCREEN_WIDTH - (int)strlen(ib) * 12 - 4;  // big IAQ value, right-aligned
+  display.setTextSize(2);
+  display.setCursor(ivX + ox, 40 + oy);
+  display.print(ib);
+  display.setTextSize(1);
+  display.setCursor(ivX - 20 + ox, 46 + oy);  // "IAQ" label left of the value
+  display.print("IAQ");
+
   display.display();
 }
 
@@ -1030,8 +1046,32 @@ void setupMqtt() {
 #endif  // ENABLE_MQTT
 
 // =================== Sensor init ===================
-void initSensors() {
+// Recover a wedged Wire1 bus: if a device is mid-transfer it can hold SDA low,
+// which a plain Wire1.begin() won't clear (a soft reboot, e.g. after OTA, leaves
+// devices powered and possibly stuck). Manually clock SCL until SDA releases,
+// emit a STOP, then re-init the peripheral. Cheap insurance, runs on boot and
+// before each reinit attempt.
+void recoverI2C() {
+  Wire1.end();
+  pinMode(I2C_SDA_PIN, INPUT_PULLUP);
+  pinMode(I2C_SCL_PIN, OUTPUT_OPEN_DRAIN);
+  digitalWrite(I2C_SCL_PIN, HIGH);
+  for (int i = 0; i < 9 && digitalRead(I2C_SDA_PIN) == LOW; i++) {
+    digitalWrite(I2C_SCL_PIN, LOW);  delayMicroseconds(5);
+    digitalWrite(I2C_SCL_PIN, HIGH); delayMicroseconds(5);
+  }
+  // STOP condition: SDA low->high while SCL is high.
+  pinMode(I2C_SDA_PIN, OUTPUT_OPEN_DRAIN);
+  digitalWrite(I2C_SDA_PIN, LOW);  delayMicroseconds(5);
+  digitalWrite(I2C_SCL_PIN, HIGH); delayMicroseconds(5);
+  digitalWrite(I2C_SDA_PIN, HIGH); delayMicroseconds(5);
   Wire1.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+  Wire1.setClock(100000);
+  Wire1.setTimeOut(50);
+}
+
+void initSensors() {
+  recoverI2C();  // start from a known-good bus (also does Wire1.begin)
   Wire1.setClock(100000);
   Wire1.setTimeOut(50);
 
@@ -1323,12 +1363,11 @@ void loop() {
     Serial.printf("BME failed %u reads — forcing reinit\n", latest.bmeFailStreak);
     bmeOK = false; latest.bmeValid = false; latest.bmeFailStreak = 0; bmeJustWentStale = true;
   }
-  if (!hdcOK && (hdcJustWentStale || (now - lastHdcReinit >= SENSOR_REINIT_INTERVAL_MS))) {
-    lastHdcReinit = now; reinitHdc();
-  }
-  if (!bmeOK && (bmeJustWentStale || (now - lastBmeReinit >= SENSOR_REINIT_INTERVAL_MS))) {
-    lastBmeReinit = now; reinitBme();
-  }
+  bool hdcDue = (!hdcOK && (hdcJustWentStale || (now - lastHdcReinit >= SENSOR_REINIT_INTERVAL_MS)));
+  bool bmeDue = (!bmeOK && (bmeJustWentStale || (now - lastBmeReinit >= SENSOR_REINIT_INTERVAL_MS)));
+  if (hdcDue || bmeDue) recoverI2C();  // clear a wedged bus before re-init
+  if (hdcDue) { lastHdcReinit = now; reinitHdc(); }
+  if (bmeDue) { lastBmeReinit = now; reinitBme(); }
 
   // OLED care: night blank/dim + anti-burn-in pixel-shift.
   if (displayOK) {

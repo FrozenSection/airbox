@@ -12,7 +12,7 @@
 // ----- Firmware identity -----
 // Bump on every change we flash, so the OLED header / dashboard confirm which
 // build is actually running (handy for verifying an OTA took).
-#define FW_VERSION        "1.2.0"
+#define FW_VERSION        "1.2.1"
 #define DEVICE_MODEL      "QT Py ESP32-S3 + BME688 + HDC3022 (standalone)"
 
 // ----- Feature flags -----
@@ -52,8 +52,9 @@
 #define DEFAULT_NIGHT_MODE   0               // 0 = blank (screen off), 1 = dim
 #define NIGHT_DIM_CONTRAST   4               // SSD1306 contrast used in dim mode (very low)
 // Timezone is chosen from a named list (see TZ_TABLE in airbox.ino); stored as
-// an index. DST is handled automatically via the POSIX TZ rule. 0 = UTC.
-#define DEFAULT_TZ_INDEX     0
+// an index. DST is handled automatically via the POSIX TZ rule.
+// 0 = UTC, 1 = Eastern (US). Default Eastern for a US-bound gift.
+#define DEFAULT_TZ_INDEX     1
 #define NTP_SERVER           "pool.ntp.org"
 // Anti-burn-in: nudge the whole layout a few px on this cycle so static labels
 // never sit on the same pixels forever.

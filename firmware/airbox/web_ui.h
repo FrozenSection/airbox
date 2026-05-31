@@ -193,25 +193,30 @@ function fmt(v,d){return (v==null||isNaN(v))?'—':Number(v).toFixed(d==null?1:d
 function ago(s){if(s==null)return '—';if(s<90)return s+'s';if(s<5400)return Math.round(s/60)+'m';return Math.round(s/3600)+'h'}
 var ACC=['unreliable','low','medium','high'];
 
-function draw(id,arr,color){
+function draw(id,arr,color,minSpan){
   var c=$(id);if(!c)return;var dpr=window.devicePixelRatio||1;
   var w=c.clientWidth,h=c.clientHeight;c.width=w*dpr;c.height=h*dpr;
   var x=c.getContext('2d');x.scale(dpr,dpr);x.clearRect(0,0,w,h);
   var v=arr.filter(function(p){return p!=null&&!isNaN(p)});
   if(v.length<2){x.fillStyle='#6e7d90';x.font='12px sans-serif';x.fillText('collecting…',6,h/2);return;}
-  var mn=Math.min.apply(null,v),mx=Math.max.apply(null,v),rng=(mx-mn)||1;
-  var pad=6,gx=w-pad*2,gy=h-pad*2,n=arr.length;
+  var dmn=Math.min.apply(null,v),dmx=Math.max.apply(null,v);
+  // Don't zoom the y-axis tighter than minSpan, so a near-flat reading looks
+  // flat instead of a dramatic slope; then add headroom padding.
+  var mid=(dmn+dmx)/2,span=Math.max(dmx-dmn,minSpan);
+  var lo=mid-span/2-span*0.18,hi=mid+span/2+span*0.18,rng=(hi-lo)||1;
+  var pad=6,gx=w-pad*2,gy=h-pad*2,n=arr.length,lx=0,ly=0;
   x.strokeStyle=color;x.lineWidth=1.8;x.beginPath();var started=false;
   for(var i=0;i<n;i++){var p=arr[i];if(p==null||isNaN(p)){started=false;continue;}
-    var px=pad+gx*(i/(n-1)),py=pad+gy*(1-(p-mn)/rng);
-    if(!started){x.moveTo(px,py);started=true;}else x.lineTo(px,py);}
+    var px=pad+gx*(i/(n-1)),py=pad+gy*(1-(p-lo)/rng);
+    if(!started){x.moveTo(px,py);started=true;}else x.lineTo(px,py);lx=px;ly=py;}
   x.stroke();
-  x.fillStyle='#6e7d90';x.font='10px sans-serif';
-  x.fillText(mx.toFixed(1),2,10);x.fillText(mn.toFixed(1),2,h-2);
+  x.fillStyle=color;x.beginPath();x.arc(lx,ly,2.4,0,6.2832);x.fill();  // latest point
+  x.fillStyle='#6e7d90';x.font='10px sans-serif';                       // actual data range
+  x.fillText(dmx.toFixed(1),2,10);x.fillText(dmn.toFixed(1),2,h-2);
 }
 function redrawCharts(){if(!hist)return;
-  draw('cT',hist.t,'#f78166');draw('cRH',hist.rh,'#58a6ff');
-  draw('cP',hist.p,'#a371f7');draw('cI',hist.iaq,'#3fb950');}
+  draw('cT',hist.t,'#f78166',2);draw('cRH',hist.rh,'#58a6ff',6);
+  draw('cP',hist.p,'#a371f7',4);draw('cI',hist.iaq,'#3fb950',25);}
 
 function poll(){fetch('/api/data').then(function(r){return r.json()}).then(function(d){
   $('conn').classList.toggle('bad',!(d.hdc_ok||d.bme_ok));
