@@ -122,7 +122,27 @@ int histHead = 0;
 int histCount = 0;
 bool fsOK = false;                  // LittleFS mounted
 unsigned long lastHistSave = 0;
-uint32_t histIntervalMs = 0;        // derived from cfg.retentionHours / HISTORY_SAMPLES
+
+// =================== Timezones ===================
+// Named zones -> POSIX TZ rule (DST handled automatically). cfg.tzIndex stores
+// the position. KEEP THIS IN SYNC with the <select id="sTz"> options in web_ui.h.
+struct TzZone { const char* label; const char* posix; };
+const TzZone TZ_TABLE[] = {
+  {"UTC",                    "UTC0"},
+  {"Eastern (New York)",     "EST5EDT,M3.2.0,M11.1.0"},
+  {"Central (Chicago)",      "CST6CDT,M3.2.0,M11.1.0"},
+  {"Mountain (Denver)",      "MST7MDT,M3.2.0,M11.1.0"},
+  {"Arizona (no DST)",       "MST7"},
+  {"Pacific (Los Angeles)",  "PST8PDT,M3.2.0,M11.1.0"},
+  {"Alaska (Anchorage)",     "AKST9AKDT,M3.2.0,M11.1.0"},
+  {"Hawaii (no DST)",        "HST10"},
+  {"UK (London)",            "GMT0BST,M3.5.0/1,M10.5.0"},
+  {"Central Europe",         "CET-1CEST,M3.5.0,M10.5.0/3"},
+  {"India (Kolkata)",        "IST-5:30"},
+  {"Japan (Tokyo)",          "JST-9"},
+  {"Sydney",                 "AEST-10AEDT,M10.1.0,M4.1.0/3"},
+};
+const uint8_t TZ_COUNT = sizeof(TZ_TABLE) / sizeof(TZ_TABLE[0]);
 
 // =================== Runtime config (NVS "cfg") ===================
 struct Config {
@@ -137,8 +157,7 @@ struct Config {
   uint8_t nightStart;   // local hour 0-23
   uint8_t nightEnd;
   uint8_t nightMode;    // 0 = blank (off), 1 = dim
-  int8_t  utcOffsetH;   // local = UTC + this (for the night-mode clock)
-  uint16_t retentionHours;  // history window: 24 / 168 / 720 / 8760
+  uint8_t tzIndex;      // index into TZ_TABLE (DST-aware local time)
 #if ENABLE_MQTT
   String mqttHost;
   String mqttUser;
@@ -170,7 +189,7 @@ volatile bool pendingFactoryReset = false;
 // Staging buffers for the above (written in handlers, read in loop()).
 String stgSsid, stgWifiPass;
 String stgName, stgUnit, stgHost, stgPass;
-String stgBright, stgNight, stgNStart, stgNEnd, stgNMode, stgUtc, stgRetention;
+String stgBright, stgNight, stgNStart, stgNEnd, stgNMode, stgTz;
 #if ENABLE_MQTT
 String stgMqttHost, stgMqttUser, stgMqttPass;
 #endif
@@ -215,8 +234,8 @@ void loadConfig() {
   cfg.nightStart = cfgPrefs.getUChar("nStart", DEFAULT_NIGHT_START);
   cfg.nightEnd   = cfgPrefs.getUChar("nEnd", DEFAULT_NIGHT_END);
   cfg.nightMode  = cfgPrefs.getUChar("nMode", DEFAULT_NIGHT_MODE);
-  cfg.utcOffsetH = cfgPrefs.getChar("utc", DEFAULT_UTC_OFFSET_H);
-  cfg.retentionHours = cfgPrefs.getUShort("reth", DEFAULT_RETENTION_HOURS);
+  cfg.tzIndex = cfgPrefs.getUChar("tz", DEFAULT_TZ_INDEX);
+  if (cfg.tzIndex >= TZ_COUNT) cfg.tzIndex = DEFAULT_TZ_INDEX;
 #if ENABLE_MQTT
   cfg.mqttHost  = cfgPrefs.getString("mhost", "");
   cfg.mqttUser  = cfgPrefs.getString("muser", "");
@@ -243,7 +262,13 @@ void clearWifiCreds() {
 }
 
 void setContrast(uint8_t v);     // defined with the OLED rendering helpers
-void recomputeHistInterval();    // defined with the history helpers
+
+// Apply the selected timezone so localtime_r() returns DST-correct local time,
+// and (re)start the NTP sync.
+void applyTimezone() {
+  uint8_t i = (cfg.tzIndex < TZ_COUNT) ? cfg.tzIndex : 0;
+  configTzTime(TZ_TABLE[i].posix, NTP_SERVER);
+}
 
 void applyAndSaveSettings() {
   if (stgName.length()) cfg.devName = stgName;
@@ -256,13 +281,9 @@ void applyAndSaveSettings() {
   if (stgNStart.length()) cfg.nightStart = (uint8_t)constrain(stgNStart.toInt(), 0, 23);
   if (stgNEnd.length())   cfg.nightEnd = (uint8_t)constrain(stgNEnd.toInt(), 0, 23);
   if (stgNMode.length())  cfg.nightMode = (stgNMode.toInt() != 0) ? 1 : 0;
-  if (stgUtc.length())    cfg.utcOffsetH = (int8_t)constrain(stgUtc.toInt(), -12, 14);
-  // History retention: changing the window changes the sample cadence, so clear
-  // the buffer (and its file) to avoid mixed-spacing data; it refills fresh.
-  bool retentionChanged = false;
-  if (stgRetention.length()) {
-    uint16_t newR = (uint16_t)stgRetention.toInt();
-    if (newR != cfg.retentionHours) { cfg.retentionHours = newR; retentionChanged = true; }
+  if (stgTz.length()) {
+    uint8_t t = (uint8_t)stgTz.toInt();
+    cfg.tzIndex = (t < TZ_COUNT) ? t : 0;
   }
   cfgPrefs.begin("cfg", false);
   cfgPrefs.putString("name", cfg.devName);
@@ -274,8 +295,7 @@ void applyAndSaveSettings() {
   cfgPrefs.putUChar("nStart", cfg.nightStart);
   cfgPrefs.putUChar("nEnd", cfg.nightEnd);
   cfgPrefs.putUChar("nMode", cfg.nightMode);
-  cfgPrefs.putChar("utc", cfg.utcOffsetH);
-  cfgPrefs.putUShort("reth", cfg.retentionHours);
+  cfgPrefs.putUChar("tz", cfg.tzIndex);
 #if ENABLE_MQTT
   if (stgMqttHost.length()) cfg.mqttHost = stgMqttHost;
   if (stgMqttUser.length()) cfg.mqttUser = stgMqttUser;
@@ -287,14 +307,7 @@ void applyAndSaveSettings() {
   cfgPrefs.end();
   // Apply the display + clock changes live (we're in loop() context).
   if (displayOK) setContrast(cfg.brightness);
-  configTime((long)cfg.utcOffsetH * 3600, 0, NTP_SERVER);
-  if (retentionChanged) {
-    recomputeHistInterval();
-    histHead = 0; histCount = 0;        // start fresh at the new cadence
-    if (fsOK) LittleFS.remove(HISTORY_FILE);
-    Serial.printf("Retention -> %u h (sample every %lu s)\n",
-                  cfg.retentionHours, (unsigned long)(histIntervalMs / 1000));
-  }
+  applyTimezone();
   Serial.println("Settings saved");
 }
 
@@ -455,15 +468,6 @@ void reinitHdc() {
   } else {
     Serial.println("HDC reinit failed (begin() returned false) — will retry in 5 min");
   }
-}
-
-// Sample spacing = retention window / fixed sample count. 64-bit intermediate
-// (1 year × 3.6M ms overflows uint32 before the divide).
-void recomputeHistInterval() {
-  uint16_t h = cfg.retentionHours;
-  if (h != 24 && h != 168 && h != 720 && h != 8760) h = DEFAULT_RETENTION_HOURS;
-  cfg.retentionHours = h;
-  histIntervalMs = (uint32_t)((uint64_t)h * 3600000ULL / HISTORY_SAMPLES);
 }
 
 void recordHistory() {
@@ -726,7 +730,7 @@ void buildDataJson(JsonDocument& doc) {
   doc["night_start"] = cfg.nightStart;
   doc["night_end"] = cfg.nightEnd;
   doc["night_mode"] = cfg.nightMode;
-  doc["utc_off"] = cfg.utcOffsetH;
+  doc["tz"] = cfg.tzIndex;
   if (hdcOK && s.hdcValid) {
     doc["temp"] = toUnit(s.hdcTempC);
     doc["rh"] = s.hdcRH;
@@ -746,7 +750,6 @@ void buildDataJson(JsonDocument& doc) {
   doc["uptime"] = millis() / 1000;
   doc["heap"] = ESP.getFreeHeap();
   doc["reset_reason"] = resetReasonName();
-  doc["retention_h"] = cfg.retentionHours;
   if (s.hdcLastGoodMs > 0) doc["hdc_age"] = (millis() - s.hdcLastGoodMs) / 1000;
   if (s.bmeLastGoodMs > 0) doc["bme_age"] = (millis() - s.bmeLastGoodMs) / 1000;
 #if ENABLE_MQTT
@@ -757,16 +760,18 @@ void buildDataJson(JsonDocument& doc) {
 }
 
 void buildHistoryJson(JsonDocument& doc) {
-  doc["interval_s"] = histIntervalMs / 1000;
+  doc["interval_s"] = HISTORY_INTERVAL_MS / 1000;
   doc["unit"] = String(cfg.unit);
   JsonArray at = doc["t"].to<JsonArray>();
   JsonArray arh = doc["rh"].to<JsonArray>();
   JsonArray ap = doc["p"].to<JsonArray>();
   JsonArray ai = doc["iaq"].to<JsonArray>();
-  // Emit oldest -> newest. ArduinoJson serializes NaN as JSON null by default
-  // (ARDUINOJSON_ENABLE_NAN == 0), so gaps come through cleanly for the chart.
-  for (int k = 0; k < histCount; k++) {
-    int idx = (histHead - histCount + k + HISTORY_SAMPLES * 2) % HISTORY_SAMPLES;
+  // Chart shows only the most recent 24 h (CHART_SAMPLES); the full 7-day buffer
+  // is reserved for the CSV export. Emit oldest -> newest. ArduinoJson maps NaN
+  // to JSON null (ARDUINOJSON_ENABLE_NAN == 0), so gaps come through cleanly.
+  int n = histCount < CHART_SAMPLES ? histCount : CHART_SAMPLES;
+  for (int k = 0; k < n; k++) {
+    int idx = (histHead - n + k + HISTORY_SAMPLES * 2) % HISTORY_SAMPLES;
     at.add(toUnit(histT[idx]));   // toUnit(NaN) == NaN -> null
     arh.add(histRH[idx]);
     ap.add(histP[idx]);
@@ -794,22 +799,17 @@ void registerRunRoutes() {
     serializeJson(doc, *res);
     req->send(res);
   });
-  // CSV export. All data by default; optional ?from=<epoch>&to=<epoch> (UTC
-  // seconds) to restrict to a date range. Times are written in the device's
-  // local time (per the UTC-offset setting). NaN gaps and pre-clock-sync
-  // samples come through as empty fields.
+  // CSV export — the full 7-day buffer. Timestamps are in the device's local
+  // time (per the timezone setting). NaN gaps and pre-clock-sync samples come
+  // through as empty fields.
   server.on("/api/history.csv", HTTP_GET, [](AsyncWebServerRequest* req) {
-    uint32_t from = req->hasParam("from") ? (uint32_t)req->getParam("from")->value().toInt() : 0;
-    uint32_t to   = req->hasParam("to")   ? (uint32_t)req->getParam("to")->value().toInt()   : 0xFFFFFFFFUL;
-    bool ranged = (from != 0) || (to != 0xFFFFFFFFUL);
     AsyncResponseStream* res = req->beginResponseStream("text/csv");
-    res->addHeader("Content-Disposition", "attachment; filename=airbox-history.csv");
+    res->addHeader("Content-Disposition", "attachment; filename=airbox-history-7d.csv");
     res->printf("timestamp,temp_%c,humidity_pct,pressure_hpa,iaq\n", cfg.unit);
     char tbuf[24];
     for (int k = 0; k < histCount; k++) {
       int idx = (histHead - histCount + k + HISTORY_SAMPLES * 2) % HISTORY_SAMPLES;
       uint32_t ts = histTime[idx];
-      if (ranged && (ts == 0 || ts < from || ts > to)) continue;  // skip unknown-time rows when ranged
       if (ts > 0) {
         time_t t = (time_t)ts;
         struct tm tmv;
@@ -836,7 +836,7 @@ void registerRunRoutes() {
     stgName = P("name"); stgUnit = P("unit"); stgHost = P("hostname"); stgPass = P("pass");
     stgBright = P("brightness"); stgNight = P("night_en");
     stgNStart = P("night_start"); stgNEnd = P("night_end");
-    stgNMode = P("night_mode"); stgUtc = P("utc_off"); stgRetention = P("retention");
+    stgNMode = P("night_mode"); stgTz = P("tz");
 #if ENABLE_MQTT
     stgMqttHost = P("mqtt_host"); stgMqttUser = P("mqtt_user"); stgMqttPass = P("mqtt_pass");
 #endif
@@ -1126,7 +1126,7 @@ void startRun() {
   server.begin();
   MDNS.addService("http", "tcp", 80);
   // NTP for the night-mode clock (harmless if night mode stays off).
-  configTime((long)cfg.utcOffsetH * 3600, 0, NTP_SERVER);
+  applyTimezone();
 #if ENABLE_ARDUINO_OTA
   setupArduinoOTA();
 #endif
@@ -1227,7 +1227,6 @@ void setup() {
   deviceId = String(buf);
 
   loadConfig();
-  recomputeHistInterval();
   if (displayOK) setContrast(cfg.brightness);  // apply saved brightness early
 
   // Mount LittleFS and restore the trend history so charts survive a reboot.
@@ -1352,7 +1351,7 @@ void loop() {
     updateRunDisplay();
   }
 
-  if (now - lastHistMs >= histIntervalMs) {
+  if (now - lastHistMs >= HISTORY_INTERVAL_MS) {
     lastHistMs = now;
     recordHistory();
   }
