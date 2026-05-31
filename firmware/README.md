@@ -72,6 +72,33 @@ and optional MQTT settings are entered in the web UI and saved to NVS.
 After the first flash, firmware updates can be done entirely in the browser at
 `http://<hostname>.local/update` (no cable needed).
 
+## Building an OTA binary
+
+The browser updater at `/update` takes a compiled **app image** (`*.ino.bin`).
+Two ways to produce it:
+
+**Arduino IDE 2.x**
+1. Select the board **and** Partition Scheme **"Minimal SPIFFS (1.9MB APP with
+   OTA/128KB SPIFFS)"** — this is required; a non-OTA scheme produces a binary
+   that uploads but won't boot.
+2. **Sketch → Export Compiled Binary** (`⌘⌥S`).
+3. The binaries land in a `build/<fqbn>/` folder inside the sketch directory.
+   Upload **`airbox.ino.bin`** to `/update`.
+   - Do *not* use `airbox.ino.merged.bin`, `*.bootloader.bin`, or
+     `*.partitions.bin` — those are for a full USB/esptool flash, not OTA.
+
+**arduino-cli**
+```sh
+arduino-cli compile \
+  --fqbn "esp32:esp32:adafruit_qtpy_esp32s3_n4r2:PartitionScheme=min_spiffs" \
+  --output-dir build  firmware/airbox
+# -> upload build/airbox.ino.bin at http://<hostname>.local/update
+```
+(Use `…_nopsram` instead of `…_n4r2` for the no-PSRAM board.)
+
+Bump `FW_VERSION` in `config.h` before building so the OLED header / dashboard
+confirm the new build actually took after the OTA.
+
 ## Notes on the preserved sensor core
 
 The BSEC2 integration, CRC32-wrapped NVS calibration persistence, per-sensor
