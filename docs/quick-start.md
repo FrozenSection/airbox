@@ -1,5 +1,9 @@
 # AirBox — Quick Start
 
+> 🖨️ **Printable one-pager:** [`AirBox-Quick-Start.pdf`](AirBox-Quick-Start.pdf)
+> (includes a scan-to-open QR for this repo). Regenerate with
+> [`make-quickstart-pdf.py`](make-quickstart-pdf.py).
+
 A standalone indoor air & environment monitor. **No app, account, or cloud** —
 it serves its own dashboard on your local network.
 
