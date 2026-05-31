@@ -31,6 +31,7 @@
 #include <Preferences.h>
 #include <esp_mac.h>
 #include <esp_task_wdt.h>
+#include <esp_system.h>  // esp_reset_reason()
 #include <time.h>
 #include "qrcode.h"  // QR encoder bundled in the ESP32 core (espressif__qrcode)
 
@@ -448,7 +449,7 @@ bool displayPowered = true;
 int  activeContrast = -1;     // currently-applied contrast (-1 = unset)
 int  shiftX = 0, shiftY = 0;  // applied to every run-screen coordinate
 unsigned long lastShift = 0;
-const int8_t SHIFT_SEQ[][2] = {{0, 0}, {2, 1}, {1, 2}, {2, 2}, {0, 1}, {1, 0}};
+const int8_t SHIFT_SEQ[][2] = {{0, 0}, {1, 0}, {2, 0}, {2, 1}, {2, 2}, {1, 2}, {0, 2}, {0, 1}};
 uint8_t shiftIdx = 0;
 
 void setContrast(uint8_t v) {
@@ -540,35 +541,75 @@ void showUrlQrSplash() {
 
 void updateRunDisplay() {
   if (!displayOK || !displayPowered) return;  // skip while night-blanked
-  const int sx = shiftX, sy = shiftY;         // anti-burn-in offset (0-2 px)
+  // Anti-burn-in offset (0-2 px). The base layout is inset ~2 px on every edge
+  // so worst-case (+2,+2) never clips. Char buffers (not String) avoid heap
+  // churn on the periodic redraw.
+  const int ox = shiftX, oy = shiftY;
   display.clearDisplay();
-  display.setTextSize(1);
-  display.setCursor(sx, sy);
-  display.print(cfg.devName.substring(0, 15));
-  display.setCursor(108 + sx, sy);
-  display.print(WiFi.status() == WL_CONNECTED ? "W" : "-");
-  display.drawFastHLine(sx, 9 + sy, SCREEN_WIDTH - 4, SSD1306_WHITE);
+  display.setTextColor(SSD1306_WHITE);
 
-  if (hdcOK && latest.hdcValid) {
-    display.setTextSize(2);
-    display.setCursor(sx, 14 + sy);
-    display.printf("%.1f%c", toUnit(latest.hdcTempC), cfg.unit);
-    display.setCursor(74 + sx, 14 + sy);
-    display.printf("%.0f%%", latest.hdcRH);
-  }
+  // ---- Header: device name + firmware version + WiFi status dot ----
   display.setTextSize(1);
-  if (bmeOK && latest.bmeValid) {
-    display.setCursor(sx, 36 + sy);
-    display.printf("Pres:%.1f hPa", latest.bmePresHpa);
-    display.setCursor(sx, 46 + sy);
-    display.printf("IAQ :%.0f acc:%u", latest.bmeIaq, latest.bmeIaqAccuracy);
-  }
-  display.setCursor(sx, 54 + sy);  // base 54 (+2 shift) keeps footer on-screen
-  display.print(cfg.hostname + ".local");
+  char nameBuf[16];
+  snprintf(nameBuf, sizeof(nameBuf), "%s", cfg.devName.c_str());
+  display.setCursor(2 + ox, 2 + oy);
+  display.print(nameBuf);
+  char verBuf[12];
+  snprintf(verBuf, sizeof(verBuf), "v%s", FW_VERSION);
+  int verX = 114 - (int)(strlen(verBuf) * 6);  // 6 px/char @ size 1, right of the dot
+  display.setCursor(verX + ox, 2 + oy);
+  display.print(verBuf);
+  if (WiFi.status() == WL_CONNECTED) display.fillCircle(121 + ox, 5 + oy, 3, SSD1306_WHITE);
+  else                              display.drawCircle(121 + ox, 5 + oy, 3, SSD1306_WHITE);
+  display.drawFastHLine(2 + ox, 12 + oy, 124, SSD1306_WHITE);
+
+  // ---- Headline: HDC temperature + humidity (size 2). Placeholders keep the
+  // layout stable before the first valid read. RH is right-aligned (base right
+  // edge x=120) so it stays anchored regardless of 2- vs 3-digit value. ----
+  display.setTextSize(2);
+  display.setCursor(2 + ox, 16 + oy);
+  if (hdcOK && latest.hdcValid) display.printf("%.1f%c", toUnit(latest.hdcTempC), cfg.unit);
+  else                          display.printf("--.-%c", cfg.unit);
+  char rhBuf[8];
+  if (hdcOK && latest.hdcValid) snprintf(rhBuf, sizeof(rhBuf), "%.0f%%", latest.hdcRH);
+  else                          snprintf(rhBuf, sizeof(rhBuf), "--%%");
+  int rhX = 120 - (int)(strlen(rhBuf) * 12);  // 12 px/char @ size 2
+  display.setCursor(rhX + ox, 16 + oy);
+  display.print(rhBuf);
+  display.drawFastHLine(2 + ox, 35 + oy, 124, SSD1306_WHITE);
+
+  // ---- Secondary: BME pressure + IAQ, stacked (size 1). IAQ stays numeric
+  // (value + calibration accuracy) — no qualitative band, by design. ----
+  display.setTextSize(1);
+  display.setCursor(2 + ox, 40 + oy);
+  if (bmeOK && latest.bmeValid) display.printf("Pres %.0f hPa", latest.bmePresHpa);
+  else                          display.print("Pres --- hPa");
+  display.setCursor(2 + ox, 52 + oy);
+  if (bmeOK && latest.bmeValid) display.printf("IAQ  %.0f  acc%u", latest.bmeIaq, latest.bmeIaqAccuracy);
+  else                          display.print("IAQ  --");
   display.display();
 }
 
 // =================== Web handlers ===================
+// Human-readable cause of the most recent reset — stable for the whole run.
+// "Software" covers the dashboard restart and a successful OTA (both reboot
+// via software). Brownout points at power; Task WDT at a hang.
+const char* resetReasonName() {
+  switch (esp_reset_reason()) {
+    case ESP_RST_POWERON:   return "Power-on";
+    case ESP_RST_EXT:       return "External";
+    case ESP_RST_SW:        return "Software";
+    case ESP_RST_PANIC:     return "Panic";
+    case ESP_RST_INT_WDT:   return "Int WDT";
+    case ESP_RST_TASK_WDT:  return "Task WDT";
+    case ESP_RST_WDT:       return "Other WDT";
+    case ESP_RST_DEEPSLEEP: return "Deep sleep";
+    case ESP_RST_BROWNOUT:  return "Brownout";
+    case ESP_RST_SDIO:      return "SDIO";
+    default:                return "Unknown";
+  }
+}
+
 void buildDataJson(JsonDocument& doc) {
   SensorData s = latest;  // snapshot (cross-task; cosmetic tearing acceptable)
   doc["name"] = cfg.devName;
@@ -599,6 +640,7 @@ void buildDataJson(JsonDocument& doc) {
   doc["rssi"] = WiFi.RSSI();
   doc["uptime"] = millis() / 1000;
   doc["heap"] = ESP.getFreeHeap();
+  doc["reset_reason"] = resetReasonName();
   if (s.hdcLastGoodMs > 0) doc["hdc_age"] = (millis() - s.hdcLastGoodMs) / 1000;
   if (s.bmeLastGoodMs > 0) doc["bme_age"] = (millis() - s.bmeLastGoodMs) / 1000;
 #if ENABLE_MQTT

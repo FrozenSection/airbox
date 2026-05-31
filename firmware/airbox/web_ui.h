@@ -220,7 +220,7 @@ function poll(){fetch('/api/data').then(function(r){return r.json()}).then(funct
     ['Free heap',(d.heap==null?'—':(d.heap/1024).toFixed(0)+' KB')],
     ['HDC sensor',d.hdc_ok?'OK':'fault'],['BME sensor',d.bme_ok?'OK':'fault'],
     ['HDC reading age',ago(d.hdc_age)],['BME reading age',ago(d.bme_age)],
-    ['Firmware',d.fw||'—']];
+    ['Last reset',d.reset_reason||'—'],['Firmware',d.fw||'—']];
   $('diagtbl').innerHTML=rows.map(function(r){return '<tr><td>'+r[0]+'</td><td>'+r[1]+'</td></tr>'}).join('');
   if(d.mqtt_enabled)$('mqttBox').classList.remove('hide');
 }).catch(function(){$('conn').classList.add('bad')});}
