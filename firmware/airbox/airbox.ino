@@ -485,20 +485,37 @@ bool isNightNow() {
 // fitting the 64 px-tall screen. The encoder is callback-based, so the draw
 // origin/scale are passed via file-scope statics.
 static int qrOx, qrOy, qrScale;
+static bool qrRightAlign = false;
+static int qrRightMargin = 2;
 static void qrDisplayCb(esp_qrcode_handle_t qr) {
   int size = esp_qrcode_get_size(qr);
+  // Right-aligned mode hugs the screen's right edge with a fixed margin,
+  // adapting to the encoded QR's actual size so the left side is always free
+  // for text (no overlap regardless of string length / QR version).
+  int x0 = qrRightAlign ? (SCREEN_WIDTH - size * qrScale - qrRightMargin) : qrOx;
+  if (x0 < 0) x0 = 0;
   for (int y = 0; y < size; y++)
     for (int x = 0; x < size; x++)
       if (esp_qrcode_get_module(qr, x, y))
-        display.fillRect(qrOx + x * qrScale, qrOy + y * qrScale, qrScale, qrScale, SSD1306_WHITE);
+        display.fillRect(x0 + x * qrScale, qrOy + y * qrScale, qrScale, qrScale, SSD1306_WHITE);
 }
-void drawQR(const char* text, int ox, int oy, int scale) {
-  qrOx = ox; qrOy = oy; qrScale = scale;
+static void qrGenerate(const char* text) {
   esp_qrcode_config_t cfg = {};
   cfg.display_func = qrDisplayCb;
   cfg.max_qrcode_version = 4;  // bounds the encode buffer; our strings pick 2-3
   cfg.qrcode_ecc_level = ESP_QRCODE_ECC_LOW;
   esp_qrcode_generate(&cfg, text);
+}
+void drawQR(const char* text, int ox, int oy, int scale) {
+  qrOx = ox; qrOy = oy; qrScale = scale; qrRightAlign = false;
+  qrGenerate(text);
+}
+// Right-aligned variant: QR sits against the right edge with `margin` px to
+// spare; `oy` is the top. Leaves the whole left side for text.
+void drawQRRight(const char* text, int oy, int scale, int margin) {
+  qrOy = oy; qrScale = scale; qrRightMargin = margin; qrRightAlign = true;
+  qrGenerate(text);
+  qrRightAlign = false;
 }
 
 void showPortalScreen() {
@@ -509,15 +526,16 @@ void showPortalScreen() {
   display.setCursor(0, 0);
   display.println("WiFi Setup");
   display.setCursor(0, 14);
-  display.println("Scan to join:");
+  display.println("Scan QR ->");
   display.setCursor(0, 26);
+  display.println("or join:");
+  display.setCursor(0, 38);
   display.println(AP_SSID);
-  display.setCursor(0, 42);
-  display.println("then open");
-  display.setCursor(0, 54);
+  display.setCursor(0, 52);
   display.println(AP_IP_STR);
-  // QR for joining the open setup AP. Format: WIFI:S:<ssid>;T:nopass;;
-  drawQR("WIFI:S:" AP_SSID ";T:nopass;;", 70, 3, 2);
+  // QR for joining the open setup AP (right-aligned so it clears the text).
+  // Format: WIFI:S:<ssid>;T:nopass;;
+  drawQRRight("WIFI:S:" AP_SSID ";T:nopass;;", 2, 2, 3);
   display.display();
 }
 
@@ -529,13 +547,15 @@ void showUrlQrSplash() {
   display.setTextSize(1);
   display.setCursor(0, 0);
   display.println("Connected!");
-  display.setCursor(0, 16);
+  display.setCursor(0, 14);
   display.println("Dashboard:");
-  display.setCursor(0, 30);
+  display.setCursor(0, 28);
   display.println(cfg.hostname + ".local");
-  display.setCursor(0, 44);
+  // IP on the bottom row, clear of (below) the QR so a long address can't
+  // collide with it.
+  display.setCursor(0, 54);
   display.println(WiFi.localIP().toString());
-  drawQR(url.c_str(), 70, 3, 2);
+  drawQRRight(url.c_str(), 2, 2, 3);
   display.display();
 }
 

@@ -160,6 +160,7 @@ small{color:#8493a8;display:block;margin-top:10px;line-height:1.4}
       <label for="mPass">MQTT password (blank = keep)</label><input id="mPass" type="password" autocomplete="off">
     </div>
     <button class="act b-blue" id="save">Save settings</button>
+    <button class="act b-grey" id="discard">Discard changes</button>
     <div id="smsg"></div>
     <hr style="border-color:#21262d;margin:18px 0">
     <button class="act b-grey" id="ota">Firmware update (OTA)</button>
@@ -249,6 +250,10 @@ $('save').onclick=function(){
   fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b})
     .then(function(){$('smsg').textContent='✅ Saved. Some changes apply after restart.';$('sPass').value='';loadHist();});
 };
+// Back out without saving: re-pull the device's currently-saved values into the
+// form, throwing away any unsaved edits. Nothing was written, so this fully
+// restores how it was before you started "mucking with it".
+$('discard').onclick=function(){loadSettings();$('sPass').value='';$('smsg').textContent='↩︎ Reverted to saved settings (nothing was changed).';};
 function act(path,confirmMsg){return function(){if(confirmMsg&&!confirm(confirmMsg))return;
   fetch(path,{method:'POST'}).then(function(){});}}
 $('ota').onclick=function(){location.href='/update'};
