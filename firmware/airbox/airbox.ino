@@ -772,6 +772,8 @@ void buildDataJson(JsonDocument& doc) {
   doc["hdc_ok"] = (hdcOK && s.hdcValid);
   doc["bme_ok"] = (bmeOK && s.bmeValid);
   doc["rssi"] = WiFi.RSSI();
+  doc["ssid"] = WiFi.SSID();
+  doc["ip"] = WiFi.localIP().toString();
   doc["uptime"] = millis() / 1000;
   doc["heap"] = ESP.getFreeHeap();
   doc["reset_reason"] = resetReasonName();

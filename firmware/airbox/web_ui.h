@@ -135,11 +135,17 @@ input:disabled,select:disabled{opacity:.55;cursor:not-allowed}
     <div class="card"><div class="lbl">Air Quality (IAQ)</div><div class="val"><span id="iaq">—</span></div><div class="acc" id="iaqacc"></div><canvas id="cI"></canvas></div>
   </section>
 
-  <section id="diag" class="hide"><div class="card"><table id="diagtbl"></table>
-    <small>Raw BME688 T/RH read high due to gas-heater self-heating — trust the
-    HDC3022 for ambient temperature/humidity. eCO₂ and bVOC are BSEC estimates
-    derived from the same gas signal as IAQ. IAQ accuracy 3 = fully calibrated.</small>
-  </div>
+  <section id="diag" class="hide">
+    <div class="card"><div class="lbl">Sensors</div><table id="dgSens"></table>
+      <small>HDC3022 is the trusted T/RH source. Calibration 0–3 is the BME688's
+      BSEC self-calibration state (3 = fully calibrated, reached over 24–48 h).</small>
+    </div>
+    <div class="card"><div class="lbl">Air quality detail (BME688 / BSEC)</div><table id="dgAq"></table>
+      <small>Raw BME T/RH read high from gas-heater self-heating. eCO₂ and bVOC
+      are BSEC estimates derived from the same gas signal as IAQ.</small>
+    </div>
+    <div class="card"><div class="lbl">Network</div><table id="dgNet"></table></div>
+    <div class="card"><div class="lbl">System</div><table id="dgSys"></table></div>
   <div class="card">
     <div class="lbl">Export data (CSV)</div>
     <p style="font-size:.88rem;color:#9fb0c3;margin:8px 0">Downloads the
@@ -152,11 +158,11 @@ input:disabled,select:disabled{opacity:.55;cursor:not-allowed}
   <section id="set" class="hide">
     <div class="card">
       <div class="lbl">Device</div>
-      <label for="sName">Device name</label><input id="sName">
-      <label for="sUnit">Temperature unit</label>
+      <label for="sName">Device Name</label><input id="sName">
+      <label for="sUnit">Temperature Unit</label>
       <select id="sUnit"><option value="F">Fahrenheit (°F)</option><option value="C">Celsius (°C)</option></select>
-      <label for="sHost">mDNS hostname (.local)</label><input id="sHost">
-      <label for="sTz">Timezone <span class="hint">— timestamps &amp; clock; DST automatic</span></label>
+      <label for="sHost">mDNS Hostname (.local)</label><input id="sHost">
+      <label for="sTz">Time Zone <span class="hint">— timestamps &amp; clock; DST automatic</span></label>
       <select id="sTz"><option value="0">UTC</option><option value="1">Eastern (New York)</option><option value="2">Central (Chicago)</option><option value="3">Mountain (Denver)</option><option value="4">Arizona (no DST)</option><option value="5">Pacific (Los Angeles)</option><option value="6">Alaska (Anchorage)</option><option value="7">Hawaii (no DST)</option><option value="8">UK (London)</option><option value="9">Central Europe</option><option value="10">India (Kolkata)</option><option value="11">Japan (Tokyo)</option><option value="12">Sydney</option></select>
     </div>
 
@@ -170,15 +176,15 @@ input:disabled,select:disabled{opacity:.55;cursor:not-allowed}
         <label for="sNMode">During night hours</label>
         <select id="sNMode"><option value="0">Turn screen off (blank)</option><option value="1">Dim screen (very low)</option></select>
         <div class="row" style="gap:10px">
-          <div style="flex:1"><label for="sNStart">From (hour 0–23)</label><input id="sNStart" type="number" min="0" max="23"></div>
-          <div style="flex:1"><label for="sNEnd">Until (hour)</label><input id="sNEnd" type="number" min="0" max="23"></div>
+          <div style="flex:1"><label for="sNStart">Starts at (hour 0–23)</label><input id="sNStart" type="number" min="0" max="23"></div>
+          <div style="flex:1"><label for="sNEnd">Ends at (hour)</label><input id="sNEnd" type="number" min="0" max="23"></div>
         </div>
       </div>
     </div>
 
     <div class="card">
       <div class="lbl">Security</div>
-      <label for="sPass">Admin password <span class="hint">— blank = keep current</span></label>
+      <label for="sPass">Admin Password <span class="hint">— blank = keep current</span></label>
       <input id="sPass" type="password" placeholder="protects updates &amp; settings" autocomplete="off">
     </div>
 
@@ -215,15 +221,20 @@ document.querySelectorAll('.tabs button').forEach(function(b){b.onclick=function
   document.querySelectorAll('.tabs button').forEach(function(x){x.classList.remove('on')});
   b.classList.add('on');['dash','diag','set'].forEach(function(s){$(s).classList.add('hide')});
   $(b.dataset.t).classList.remove('hide');
+  // Charts can't size while hidden, so redraw them once the Dashboard is shown.
+  if(b.dataset.t==='dash')redrawCharts();
 }});
 function fmt(v,d){return (v==null||isNaN(v))?'—':Number(v).toFixed(d==null?1:d)}
 function ago(s){if(s==null)return '—';if(s<90)return s+'s';if(s<5400)return Math.round(s/60)+'m';return Math.round(s/3600)+'h'}
+function tbl(id,rows){$(id).innerHTML=rows.map(function(r){return '<tr><td>'+r[0]+'</td><td>'+r[1]+'</td></tr>'}).join('');}
 var ACC=['unreliable','low','medium','high'];
 
 function span2str(sp){if(sp<5400)return Math.round(sp/60)+'m';var hr=sp/3600;return (hr<10?hr.toFixed(1):Math.round(hr))+'h';}
 function draw(id,arr,color,minSpan,iv){
   var c=$(id);if(!c)return;var dpr=window.devicePixelRatio||1;
-  var w=c.clientWidth,h=c.clientHeight;c.width=w*dpr;c.height=h*dpr;
+  var w=c.clientWidth,h=c.clientHeight;
+  if(!w||!h)return;            // canvas hidden (e.g. another tab) — don't draw 0×0
+  c.width=w*dpr;c.height=h*dpr;
   var x=c.getContext('2d');x.scale(dpr,dpr);x.clearRect(0,0,w,h);
   var v=arr.filter(function(p){return p!=null&&!isNaN(p)});
   if(v.length<2){x.fillStyle='#6e7d90';x.font='12px sans-serif';x.fillText('collecting…',6,h/2);return;}
@@ -259,16 +270,22 @@ function poll(){fetch('/api/data').then(function(r){return r.json()}).then(funct
   $('temp').textContent=fmt(d.temp);$('rh').textContent=fmt(d.rh,0);
   $('pres').textContent=fmt(d.pressure);$('iaq').textContent=fmt(d.iaq,0);
   $('iaqacc').textContent='calibration: '+(ACC[d.iaq_acc]||'—');
-  // diagnostics
-  var rows=[['Raw BME temp',fmt(d.bme_temp)+' °'+unit],['Raw BME humidity',fmt(d.bme_rh,0)+' %'],
-    ['eCO₂ (estimated)',fmt(d.eco2,0)+' ppm'],['bVOC',fmt(d.bvoc,2)+' ppm'],
-    ['IAQ accuracy',(ACC[d.iaq_acc]||'—')+' ('+(d.iaq_acc==null?'—':d.iaq_acc)+')'],
-    ['WiFi RSSI',fmt(d.rssi,0)+' dBm'],['Uptime',ago(d.uptime)],
+  // diagnostics — grouped by subsystem
+  var acc=(ACC[d.iaq_acc]||'—')+' ('+(d.iaq_acc==null?'—':d.iaq_acc)+'/3)';
+  tbl('dgSens',[
+    ['HDC3022 (T/RH)',d.hdc_ok?'OK':'FAULT'],['HDC reading age',ago(d.hdc_age)],
+    ['BME688',d.bme_ok?'OK':'FAULT'],['BME reading age',ago(d.bme_age)],
+    ['BME calibration',acc]]);
+  tbl('dgAq',[
+    ['Raw BME temp',fmt(d.bme_temp)+' °'+unit],['Raw BME humidity',fmt(d.bme_rh,0)+' %'],
+    ['eCO₂ (est.)',fmt(d.eco2,0)+' ppm'],['bVOC',fmt(d.bvoc,2)+' ppm']]);
+  tbl('dgNet',[
+    ['IP address',d.ip||'—'],['Hostname',(d.hostname||'airbox')+'.local'],
+    ['WiFi SSID',d.ssid||'—'],['WiFi RSSI',fmt(d.rssi,0)+' dBm']]);
+  tbl('dgSys',[
+    ['Firmware',d.fw||'—'],['Uptime',ago(d.uptime)],
     ['Free heap',(d.heap==null?'—':(d.heap/1024).toFixed(0)+' KB')],
-    ['HDC sensor',d.hdc_ok?'OK':'fault'],['BME sensor',d.bme_ok?'OK':'fault'],
-    ['HDC reading age',ago(d.hdc_age)],['BME reading age',ago(d.bme_age)],
-    ['Last reset',d.reset_reason||'—'],['Firmware',d.fw||'—']];
-  $('diagtbl').innerHTML=rows.map(function(r){return '<tr><td>'+r[0]+'</td><td>'+r[1]+'</td></tr>'}).join('');
+    ['Last reset',d.reset_reason||'—']]);
   if(d.mqtt_enabled)$('mqttBox').classList.remove('hide');
 }).catch(function(){$('conn').classList.add('bad')});}
 
