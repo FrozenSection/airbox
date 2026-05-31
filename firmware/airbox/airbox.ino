@@ -33,6 +33,7 @@
 #include <esp_task_wdt.h>
 #include <esp_system.h>  // esp_reset_reason()
 #include <time.h>
+#include <LittleFS.h>    // persistent trend history
 #include "qrcode.h"  // QR encoder bundled in the ESP32 core (espressif__qrcode)
 
 #define ELEGANTOTA_USE_ASYNC_WEBSERVER 1
@@ -112,12 +113,15 @@ unsigned long lastHistMs = 0;
 // =================== Trend history ring buffer ===================
 // Static allocation (link-time accounted, no heap fragmentation). Stores raw
 // values; temperature is converted to the display unit when served.
-float histT[HISTORY_SAMPLES];    // °C (raw)
-float histRH[HISTORY_SAMPLES];   // %
-float histP[HISTORY_SAMPLES];    // hPa
-float histIAQ[HISTORY_SAMPLES];  // IAQ
+float    histT[HISTORY_SAMPLES];    // °C (raw)
+float    histRH[HISTORY_SAMPLES];   // %
+float    histP[HISTORY_SAMPLES];    // hPa
+float    histIAQ[HISTORY_SAMPLES];  // IAQ
+uint32_t histTime[HISTORY_SAMPLES]; // UTC epoch seconds (0 = before clock sync)
 int histHead = 0;
 int histCount = 0;
+bool fsOK = false;                  // LittleFS mounted
+unsigned long lastHistSave = 0;
 
 // =================== Runtime config (NVS "cfg") ===================
 struct Config {
@@ -435,12 +439,65 @@ void reinitHdc() {
 }
 
 void recordHistory() {
+  time_t now = time(nullptr);
+  histTime[histHead] = (now > 1700000000) ? (uint32_t)now : 0;  // 0 until NTP syncs
   histT[histHead]   = (hdcOK && latest.hdcValid) ? latest.hdcTempC : NAN;
   histRH[histHead]  = (hdcOK && latest.hdcValid) ? latest.hdcRH : NAN;
   histP[histHead]   = (bmeOK && latest.bmeValid) ? latest.bmePresHpa : NAN;
   histIAQ[histHead] = (bmeOK && latest.bmeValid) ? latest.bmeIaq : NAN;
   histHead = (histHead + 1) % HISTORY_SAMPLES;
   if (histCount < HISTORY_SAMPLES) histCount++;
+}
+
+// Persist the ring buffer to LittleFS so the charts survive a reboot. Written
+// on a slow cadence (+ before any planned restart), so worst-case power-loss
+// data loss is one save interval — fine for trend data, easy on flash.
+#define HIST_MAGIC 0x584F4241UL  // "ABOX"
+void saveHistory() {
+  if (!fsOK) return;
+  File f = LittleFS.open(HISTORY_FILE, "w");
+  if (!f) { Serial.println("history save: open failed"); return; }
+  uint32_t magic = HIST_MAGIC;
+  uint16_t ver = 1, n = HISTORY_SAMPLES;
+  f.write((uint8_t*)&magic, 4);
+  f.write((uint8_t*)&ver, 2);
+  f.write((uint8_t*)&n, 2);
+  f.write((uint8_t*)&histHead, sizeof(histHead));
+  f.write((uint8_t*)&histCount, sizeof(histCount));
+  f.write((uint8_t*)histT, sizeof(histT));
+  f.write((uint8_t*)histRH, sizeof(histRH));
+  f.write((uint8_t*)histP, sizeof(histP));
+  f.write((uint8_t*)histIAQ, sizeof(histIAQ));
+  f.write((uint8_t*)histTime, sizeof(histTime));
+  f.close();
+  Serial.printf("history saved (%d samples)\n", histCount);
+}
+
+void loadHistory() {
+  if (!fsOK || !LittleFS.exists(HISTORY_FILE)) return;
+  File f = LittleFS.open(HISTORY_FILE, "r");
+  if (!f) return;
+  uint32_t magic = 0;
+  uint16_t ver = 0, n = 0;
+  f.read((uint8_t*)&magic, 4);
+  f.read((uint8_t*)&ver, 2);
+  f.read((uint8_t*)&n, 2);
+  if (magic != HIST_MAGIC || ver != 1 || n != HISTORY_SAMPLES) {
+    Serial.println("history file mismatch — ignoring");
+    f.close();
+    return;
+  }
+  f.read((uint8_t*)&histHead, sizeof(histHead));
+  f.read((uint8_t*)&histCount, sizeof(histCount));
+  f.read((uint8_t*)histT, sizeof(histT));
+  f.read((uint8_t*)histRH, sizeof(histRH));
+  f.read((uint8_t*)histP, sizeof(histP));
+  f.read((uint8_t*)histIAQ, sizeof(histIAQ));
+  f.read((uint8_t*)histTime, sizeof(histTime));
+  f.close();
+  if (histHead < 0 || histHead >= HISTORY_SAMPLES) histHead = 0;
+  if (histCount < 0 || histCount > HISTORY_SAMPLES) histCount = 0;
+  Serial.printf("history restored (%d samples)\n", histCount);
 }
 
 // =================== OLED rendering ===================
@@ -706,6 +763,41 @@ void registerRunRoutes() {
     buildHistoryJson(doc);
     AsyncResponseStream* res = req->beginResponseStream("application/json");
     serializeJson(doc, *res);
+    req->send(res);
+  });
+  // CSV export. All data by default; optional ?from=<epoch>&to=<epoch> (UTC
+  // seconds) to restrict to a date range. Times are written in the device's
+  // local time (per the UTC-offset setting). NaN gaps and pre-clock-sync
+  // samples come through as empty fields.
+  server.on("/api/history.csv", HTTP_GET, [](AsyncWebServerRequest* req) {
+    uint32_t from = req->hasParam("from") ? (uint32_t)req->getParam("from")->value().toInt() : 0;
+    uint32_t to   = req->hasParam("to")   ? (uint32_t)req->getParam("to")->value().toInt()   : 0xFFFFFFFFUL;
+    bool ranged = (from != 0) || (to != 0xFFFFFFFFUL);
+    AsyncResponseStream* res = req->beginResponseStream("text/csv");
+    res->addHeader("Content-Disposition", "attachment; filename=airbox-history.csv");
+    res->printf("timestamp,temp_%c,humidity_pct,pressure_hpa,iaq\n", cfg.unit);
+    char tbuf[24];
+    for (int k = 0; k < histCount; k++) {
+      int idx = (histHead - histCount + k + HISTORY_SAMPLES * 2) % HISTORY_SAMPLES;
+      uint32_t ts = histTime[idx];
+      if (ranged && (ts == 0 || ts < from || ts > to)) continue;  // skip unknown-time rows when ranged
+      if (ts > 0) {
+        time_t t = (time_t)ts;
+        struct tm tmv;
+        localtime_r(&t, &tmv);
+        strftime(tbuf, sizeof(tbuf), "%Y-%m-%d %H:%M:%S", &tmv);
+        res->print(tbuf);
+      }
+      res->print(',');
+      if (!isnan(histT[idx]))   res->print(toUnit(histT[idx]), 2);
+      res->print(',');
+      if (!isnan(histRH[idx]))  res->print(histRH[idx], 1);
+      res->print(',');
+      if (!isnan(histP[idx]))   res->print(histP[idx], 1);
+      res->print(',');
+      if (!isnan(histIAQ[idx])) res->print(histIAQ[idx], 0);
+      res->print('\n');
+    }
     req->send(res);
   });
   server.on("/api/settings", HTTP_POST, [](AsyncWebServerRequest* req) {
@@ -1018,6 +1110,12 @@ void startRun() {
 
 // =================== Pending-action handler (loop context) ===================
 void handlePendingActions() {
+  // Every branch below that reboots flushes history first, so a planned restart
+  // never loses recent trend points.
+  if (pendingFactoryReset || pendingReconfigure || pendingSaveWifi
+      || pendingRecalibrate || pendingRestart) {
+    saveHistory();
+  }
   if (pendingFactoryReset || pendingReconfigure) {
     Serial.println("Wiping WiFi creds, rebooting into portal");
     if (displayOK) {
@@ -1101,6 +1199,12 @@ void setup() {
 
   loadConfig();
   if (displayOK) setContrast(cfg.brightness);  // apply saved brightness early
+
+  // Mount LittleFS and restore the trend history so charts survive a reboot.
+  fsOK = LittleFS.begin(true);  // format on first boot if unformatted
+  if (fsOK) { loadHistory(); }
+  else      { Serial.println("LittleFS mount failed — history won't persist"); }
+
   Serial.printf("Device: %s  host: %s.local  unit: %c\n",
                 cfg.devName.c_str(), cfg.hostname.c_str(), cfg.unit);
 
@@ -1221,6 +1325,12 @@ void loop() {
   if (now - lastHistMs >= HISTORY_INTERVAL_MS) {
     lastHistMs = now;
     recordHistory();
+  }
+
+  // Flush history to flash on a slow cadence (planned restarts flush too).
+  if (fsOK && now - lastHistSave >= HISTORY_SAVE_INTERVAL_MS) {
+    lastHistSave = now;
+    saveHistory();
   }
 
 #if ENABLE_MQTT

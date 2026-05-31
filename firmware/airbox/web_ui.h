@@ -134,6 +134,18 @@ small{color:#8493a8;display:block;margin-top:10px;line-height:1.4}
     <small>Raw BME688 T/RH read high due to gas-heater self-heating — trust the
     HDC3022 for ambient temperature/humidity. eCO₂ and bVOC are BSEC estimates
     derived from the same gas signal as IAQ. IAQ accuracy 3 = fully calibrated.</small>
+  </div>
+  <div class="card">
+    <div class="lbl">Export data (CSV)</div>
+    <p style="font-size:.88rem;color:#9fb0c3;margin:8px 0">Trend history is kept on
+    the device (survives reboots) — about 24 h at 5-minute spacing.</p>
+    <button class="act b-blue" id="csvAll">Download all</button>
+    <div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap;align-items:flex-end">
+      <div><label for="csvFrom" style="margin-top:0">From</label><input id="csvFrom" type="datetime-local" style="width:auto"></div>
+      <div><label for="csvTo" style="margin-top:0">To</label><input id="csvTo" type="datetime-local" style="width:auto"></div>
+      <button class="act b-grey" id="csvRange">Download range</button>
+    </div>
+    <small>Range uses the device's local time. Leave a field blank for open-ended.</small>
   </div></section>
 
   <section id="set" class="hide"><div class="card">
@@ -260,6 +272,15 @@ $('ota').onclick=function(){location.href='/update'};
 $('recal').onclick=act('/api/recalibrate','Recalibrate air sensor? IAQ accuracy resets and re-learns over 24–48 h.');
 $('recfg').onclick=act('/api/reconfigure','Reboot into WiFi setup portal now?');
 $('restart').onclick=act('/api/restart','Restart the device now?');
+// CSV export. datetime-local values are local time; convert to UTC epoch seconds
+// to match the stored timestamps.
+$('csvAll').onclick=function(){location.href='/api/history.csv'};
+$('csvRange').onclick=function(){
+  var q=[],f=$('csvFrom').value,t=$('csvTo').value;
+  if(f)q.push('from='+Math.floor(new Date(f).getTime()/1000));
+  if(t)q.push('to='+Math.floor(new Date(t).getTime()/1000));
+  location.href='/api/history.csv'+(q.length?('?'+q.join('&')):'');
+};
 
 loadSettings();poll();loadHist();
 setInterval(poll,4000);setInterval(loadHist,60000);

@@ -26,23 +26,29 @@ Already installed on this machine: `arduino-cli`, esp32 core 3.3.8, and the
 libraries. To rebuild the toolchain elsewhere, see
 [`firmware/README.md`](../firmware/README.md). Confirm the board variant:
 
-- [ ] **No-PSRAM** board → FQBN `esp32:esp32:adafruit_qtpy_esp32s3_nopsram`
-- [ ] **2MB PSRAM** board → FQBN `esp32:esp32:adafruit_qtpy_esp32s3_n4r2`
-- [ ] Partition scheme includes **OTA** (needed for browser firmware updates).
-      The board default used in the test build does; if you change it in the IDE,
-      pick e.g. "Minimal SPIFFS (1.9MB APP with OTA)".
+- [ ] **No-PSRAM** board → base FQBN `esp32:esp32:adafruit_qtpy_esp32s3_nopsram`
+- [ ] **2MB PSRAM** board → base FQBN `esp32:esp32:adafruit_qtpy_esp32s3_n4r2`
+- [ ] **Partition scheme = "Minimal SPIFFS (1.9MB APP with OTA/128KB SPIFFS)"** —
+      **required.** The board default (`tinyuf2_noota`) has *no* OTA slot and no
+      filesystem, which breaks browser OTA *and* persistent history. With
+      arduino-cli, append `:PartitionScheme=min_spiffs` to the FQBN (below).
 
 ## 3. Compile & flash
 
 ```sh
 cd ~/Documents/GitHub/airbox
-FQBN=esp32:esp32:adafruit_qtpy_esp32s3_nopsram   # or _n4r2 for the PSRAM board
+# include the partition scheme in the FQBN (use _nopsram for the no-PSRAM board)
+FQBN="esp32:esp32:adafruit_qtpy_esp32s3_n4r2:PartitionScheme=min_spiffs"
 
-arduino-cli compile --fqbn $FQBN firmware/airbox          # should report ~59% flash
+arduino-cli compile --fqbn "$FQBN" firmware/airbox        # ~66% flash
 arduino-cli board list                                    # find the /dev/cu.usbmodem* port
-arduino-cli upload -p /dev/cu.usbmodemXXXX --fqbn $FQBN firmware/airbox
+arduino-cli upload -p /dev/cu.usbmodemXXXX --fqbn "$FQBN" firmware/airbox
 arduino-cli monitor -p /dev/cu.usbmodemXXXX -c baudrate=115200   # watch boot logs
 ```
+
+> Changing the partition scheme repartitions the chip — stored WiFi credentials
+> and BSEC calibration **may be wiped**, so re-provision if it boots into the
+> setup portal after this flash.
 
 - [ ] Compiles without errors.
 - [ ] Uploads. (If upload fails: **double-tap RESET** to force the S3 bootloader,
