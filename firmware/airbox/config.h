@@ -56,9 +56,14 @@
 #define PIXEL_SHIFT_INTERVAL_MS  300000UL    // 5 minutes
 
 // ----- Trend history ring buffer -----
-// 288 samples @ 5 min spacing = 24 h of trend. 4 channels x 288 x 4 B ≈ 4.6 KB.
-#define HISTORY_SAMPLES        288
-#define HISTORY_INTERVAL_MS    300000UL      // 5 minutes
+// 288 samples @ 5 min spacing = 24 h of trend. Persisted to LittleFS so the
+// charts survive a reboot/power-cycle, with a UTC timestamp per sample for the
+// CSV export. Requires a partition scheme WITH a filesystem AND OTA — build
+// with "Minimal SPIFFS (1.9MB APP with OTA/128KB SPIFFS)" (see firmware/README).
+#define HISTORY_SAMPLES          288
+#define HISTORY_INTERVAL_MS      300000UL    // 5 minutes
+#define HISTORY_SAVE_INTERVAL_MS 1800000UL   // flush history to flash every 30 min
+#define HISTORY_FILE             "/hist.bin"
 
 // ----- Pins / hardware -----
 #define I2C_SDA_PIN       41                 // STEMMA QT (Wire1)

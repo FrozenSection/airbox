@@ -9,9 +9,16 @@ dashboard, and provisions WiFi through a captive portal.
 - **Adafruit QT Py ESP32-S3** (No PSRAM or 2MB PSRAM — both work)
 - Arduino IDE board: **Tools → Board → ESP32 Arduino → Adafruit QT Py ESP32-S3**
 - Install the **esp32 by Espressif Systems** board package (arduino-esp32 v3.x)
-- Partition scheme: **Minimal SPIFFS (1.9MB APP with OTA)** or any layout with
-  an OTA app partition (web OTA needs two app slots). The default app layout
-  also works; "Minimal SPIFFS" is what the original was verified on.
+- Partition scheme: **REQUIRED → "Minimal SPIFFS (1.9MB APP with OTA/128KB
+  SPIFFS)"** (Tools → Partition Scheme). This is mandatory, not optional:
+  - The QT Py S3's **default partition has _no_ OTA and no usable filesystem**,
+    which would silently break **browser OTA** *and* **persistent history**.
+  - "Minimal SPIFFS" provides the two app slots OTA needs **and** a small
+    filesystem for the saved trend history.
+  - arduino-cli: append it to the FQBN —
+    `…:adafruit_qtpy_esp32s3_n4r2:PartitionScheme=min_spiffs`
+  - Trade-off: this replaces the TinyUF2 layout, so drag-and-drop `.uf2`
+    flashing is unavailable. Flash over USB/serial (or OTA) instead.
 
 ## Libraries (Arduino IDE → Library Manager)
 
