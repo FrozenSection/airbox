@@ -628,23 +628,23 @@ void showPortalScreen() {
   display.display();
 }
 
-void showUrlQrSplash() {
+// Brief post-connect splash. No QR here — WiFi is already set on a normal
+// reboot/OTA, so the QR (only useful for first setup / WiFi reset) lives on the
+// captive-portal screen instead.
+void showConnectedSplash() {
   if (!displayOK) return;
-  String url = String("http://") + cfg.hostname + ".local";
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
   display.setTextSize(1);
   display.setCursor(0, 0);
   display.println("Connected!");
-  display.setCursor(0, 14);
-  display.println("Dashboard:");
-  display.setCursor(0, 28);
+  display.setCursor(0, 18);
+  display.println("Open dashboard at:");
+  display.setCursor(0, 32);
   display.println(cfg.hostname + ".local");
-  // IP on the bottom row, clear of (below) the QR so a long address can't
-  // collide with it.
-  display.setCursor(0, 54);
+  display.setCursor(0, 48);
+  display.print("or  ");
   display.println(WiFi.localIP().toString());
-  drawQRRight(url.c_str(), 2, 2, 3);
   display.display();
 }
 
@@ -690,13 +690,14 @@ void updateRunDisplay() {
   display.setCursor(SCREEN_WIDTH - (int)strlen(rh) * 12 - 4 + ox, 15 + oy);
   display.print(rh);
 
-  // ---- Row 2: pressure (big number + small hPa) + IAQ (small label + big) ----
+  // ---- Row 2: pressure (big number + small "hPa") + IAQ (big number) ----
   char pb[8];
   if (bmeGood) snprintf(pb, sizeof(pb), "%.0f", latest.bmePresHpa);
   else         snprintf(pb, sizeof(pb), "--");
   display.setTextSize(2);
   display.setCursor(ox, 40 + oy);
   display.print(pb);
+  int pEnd = (int)strlen(pb) * 12 + 2 + 18;   // end of "<pressure> hPa" block
   display.setTextSize(1);
   display.setCursor(ox + (int)strlen(pb) * 12 + 2, 46 + oy);
   display.print("hPa");
@@ -708,9 +709,17 @@ void updateRunDisplay() {
   display.setTextSize(2);
   display.setCursor(ivX + ox, 40 + oy);
   display.print(ib);
-  display.setTextSize(1);
-  display.setCursor(ivX - 20 + ox, 46 + oy);  // "IAQ" label left of the value
-  display.print("IAQ");
+  // Adaptive label so it can never collide with "hPa": "IAQ" if it fits, else
+  // "AQ", else nothing (4-digit pressure + 3-digit IAQ is the tight case).
+  const char* aqLbl = "IAQ"; int aqW = 18;
+  int gap = ivX - pEnd;
+  if (gap < aqW + 4) { aqLbl = "AQ"; aqW = 12; }
+  if (gap < aqW + 3) { aqLbl = "";   aqW = 0; }
+  if (aqW) {
+    display.setTextSize(1);
+    display.setCursor(ivX - aqW - 2 + ox, 46 + oy);
+    display.print(aqLbl);
+  }
 
   display.display();
 }
@@ -1280,7 +1289,7 @@ void setup() {
   // Decide mode: try STA if we have creds; otherwise (or on failure) portal.
   if (cfg.ssid.length() > 0 && connectSTA()) {
     startRun();
-    showUrlQrSplash();  // show dashboard URL/QR briefly, then readings take over
+    showConnectedSplash();  // brief address splash, then readings take over
     unsigned long splash = millis();
     while (millis() - splash < 8000) { esp_task_wdt_reset(); delay(100); }
     readSensors();
