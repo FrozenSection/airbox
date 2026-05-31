@@ -112,6 +112,11 @@ button.act{padding:11px 14px;border:0;border-radius:9px;color:#fff;font-size:.95
 .b-blue{background:#2f6df6}.b-grey{background:#33405a}.b-amber{background:#9a6700}.b-red{background:#a4282f}
 small{color:#8493a8;display:block;margin-top:10px;line-height:1.4}
 #stamp{font-size:.75rem;color:#6e7d90}
+#set .card{margin-bottom:12px}
+.sub{margin:8px 0 2px 8px;padding-left:14px;border-left:2px solid #2a3446;transition:opacity .15s}
+.sub.off{opacity:.4}
+.hint{font-size:.78rem;color:#7d8da0;font-weight:400;text-transform:none;letter-spacing:0}
+input:disabled,select:disabled{opacity:.55;cursor:not-allowed}
 </style></head><body>
 <header>
   <h1 id="name">AirBox</h1>
@@ -144,41 +149,63 @@ small{color:#8493a8;display:block;margin-top:10px;line-height:1.4}
     <small>Columns: timestamp (device local time), temperature, humidity, pressure, IAQ.</small>
   </div></section>
 
-  <section id="set" class="hide"><div class="card">
-    <label for="sName">Device name</label><input id="sName">
-    <label for="sUnit">Temperature unit</label>
-    <select id="sUnit"><option value="F">Fahrenheit (°F)</option><option value="C">Celsius (°C)</option></select>
-    <label for="sHost">mDNS hostname (.local)</label><input id="sHost">
-    <label for="sBright">Display brightness</label>
-    <select id="sBright"><option value="8">Low (longest OLED life)</option><option value="64">Medium</option><option value="160">High</option><option value="255">Max</option></select>
-    <div class="row" style="margin-top:12px"><input id="sNight" type="checkbox"><label for="sNight" style="margin:0">Night mode — blank or dim the screen on a schedule</label></div>
-    <label for="sNMode">During night hours</label>
-    <select id="sNMode"><option value="0">Turn screen off (blank)</option><option value="1">Dim screen</option></select>
-    <div class="row" style="gap:10px">
-      <div style="flex:1"><label for="sNStart">From (hour, 0–23)</label><input id="sNStart" type="number" min="0" max="23"></div>
-      <div style="flex:1"><label for="sNEnd">Back to normal at (hour)</label><input id="sNEnd" type="number" min="0" max="23"></div>
+  <section id="set" class="hide">
+    <div class="card">
+      <div class="lbl">Device</div>
+      <label for="sName">Device name</label><input id="sName">
+      <label for="sUnit">Temperature unit</label>
+      <select id="sUnit"><option value="F">Fahrenheit (°F)</option><option value="C">Celsius (°C)</option></select>
+      <label for="sHost">mDNS hostname (.local)</label><input id="sHost">
+      <label for="sTz">Timezone <span class="hint">— timestamps &amp; clock; DST automatic</span></label>
+      <select id="sTz"><option value="0">UTC</option><option value="1">Eastern (New York)</option><option value="2">Central (Chicago)</option><option value="3">Mountain (Denver)</option><option value="4">Arizona (no DST)</option><option value="5">Pacific (Los Angeles)</option><option value="6">Alaska (Anchorage)</option><option value="7">Hawaii (no DST)</option><option value="8">UK (London)</option><option value="9">Central Europe</option><option value="10">India (Kolkata)</option><option value="11">Japan (Tokyo)</option><option value="12">Sydney</option></select>
     </div>
-    <label for="sTz">Timezone (for timestamps &amp; night-mode clock; DST automatic)</label>
-    <select id="sTz"><option value="0">UTC</option><option value="1">Eastern (New York)</option><option value="2">Central (Chicago)</option><option value="3">Mountain (Denver)</option><option value="4">Arizona (no DST)</option><option value="5">Pacific (Los Angeles)</option><option value="6">Alaska (Anchorage)</option><option value="7">Hawaii (no DST)</option><option value="8">UK (London)</option><option value="9">Central Europe</option><option value="10">India (Kolkata)</option><option value="11">Japan (Tokyo)</option><option value="12">Sydney</option></select>
-    <label for="sPass">Admin password (blank = keep current)</label>
-    <input id="sPass" type="password" placeholder="protects updates &amp; settings" autocomplete="off">
-    <div id="mqttBox" class="hide">
-      <label for="mHost">MQTT broker host</label><input id="mHost">
-      <label for="mUser">MQTT user</label><input id="mUser">
-      <label for="mPass">MQTT password (blank = keep)</label><input id="mPass" type="password" autocomplete="off">
+
+    <div class="card">
+      <div class="lbl">Display</div>
+      <label for="sBright">Brightness</label>
+      <select id="sBright"><option value="8">Low (longest OLED life)</option><option value="64">Medium</option><option value="160">High</option><option value="255">Max</option></select>
+      <div class="row" style="margin-top:16px"><input id="sNight" type="checkbox"><label for="sNight" style="margin:0;font-weight:600;color:#e6edf3">Night Mode</label></div>
+      <div class="hint" style="margin-top:3px">Blank or dim the screen on a schedule.</div>
+      <div class="sub" id="nightSub">
+        <label for="sNMode">During night hours</label>
+        <select id="sNMode"><option value="0">Turn screen off (blank)</option><option value="1">Dim screen (very low)</option></select>
+        <div class="row" style="gap:10px">
+          <div style="flex:1"><label for="sNStart">From (hour 0–23)</label><input id="sNStart" type="number" min="0" max="23"></div>
+          <div style="flex:1"><label for="sNEnd">Until (hour)</label><input id="sNEnd" type="number" min="0" max="23"></div>
+        </div>
+      </div>
     </div>
-    <button class="act b-blue" id="save">Save settings</button>
-    <button class="act b-grey" id="discard">Discard changes</button>
-    <div id="smsg"></div>
-    <hr style="border-color:#21262d;margin:18px 0">
-    <button class="act b-grey" id="ota">Firmware update (OTA)</button>
-    <button class="act b-amber" id="recal">Recalibrate air sensor</button>
-    <button class="act b-grey" id="recfg">Reconfigure WiFi</button>
-    <button class="act b-red" id="restart">Restart device</button>
-    <small>Recalibrate clears the BSEC baseline — IAQ accuracy drops to 0 and
-    re-learns over 24–48 h. Reconfigure WiFi reboots into the setup portal
-    (you'll rejoin “AirBox-Setup” to pick a new network).</small>
-  </div></section>
+
+    <div class="card">
+      <div class="lbl">Security</div>
+      <label for="sPass">Admin password <span class="hint">— blank = keep current</span></label>
+      <input id="sPass" type="password" placeholder="protects updates &amp; settings" autocomplete="off">
+    </div>
+
+    <div class="card hide" id="mqttBox">
+      <div class="lbl">MQTT</div>
+      <label for="mHost">Broker host</label><input id="mHost">
+      <label for="mUser">User</label><input id="mUser">
+      <label for="mPass">Password <span class="hint">— blank = keep</span></label><input id="mPass" type="password" autocomplete="off">
+    </div>
+
+    <div class="card">
+      <button class="act b-blue" id="save">Save settings</button>
+      <button class="act b-grey" id="discard">Discard changes</button>
+      <div id="smsg"></div>
+    </div>
+
+    <div class="card">
+      <div class="lbl">Maintenance</div>
+      <button class="act b-grey" id="ota">Firmware update (OTA)</button>
+      <button class="act b-amber" id="recal">Recalibrate air sensor</button>
+      <button class="act b-grey" id="recfg">Reconfigure WiFi</button>
+      <button class="act b-red" id="restart">Restart device</button>
+      <small>Recalibrate clears the BSEC baseline — IAQ accuracy drops to 0 and
+      re-learns over 24–48 h. Reconfigure WiFi reboots into the setup portal
+      (you'll rejoin “AirBox-Setup” to pick a new network).</small>
+    </div>
+  </section>
 </main>
 <script>
 var unit='F',hist=null;
@@ -257,7 +284,12 @@ function loadSettings(){fetch('/api/data').then(function(r){return r.json()}).th
   $('sNEnd').value=(d.night_end!=null?d.night_end:7);
   $('sTz').value=(d.tz!=null?d.tz:0);
   if(d.mqtt_enabled){$('mqttBox').classList.remove('hide');$('mHost').value=d.mqtt_host||'';$('mUser').value=d.mqtt_user||'';}
+  syncNight();
 });}
+// Grey out + disable the Night Mode sub-options when it's off.
+function syncNight(){var on=$('sNight').checked;$('nightSub').classList.toggle('off',!on);
+  ['sNMode','sNStart','sNEnd'].forEach(function(i){$(i).disabled=!on;});}
+$('sNight').onchange=syncNight;
 $('save').onclick=function(){
   var b='name='+encodeURIComponent($('sName').value)+'&unit='+$('sUnit').value+
         '&hostname='+encodeURIComponent($('sHost').value)+'&pass='+encodeURIComponent($('sPass').value)+
