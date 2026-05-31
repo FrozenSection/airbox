@@ -193,7 +193,8 @@ function fmt(v,d){return (v==null||isNaN(v))?'—':Number(v).toFixed(d==null?1:d
 function ago(s){if(s==null)return '—';if(s<90)return s+'s';if(s<5400)return Math.round(s/60)+'m';return Math.round(s/3600)+'h'}
 var ACC=['unreliable','low','medium','high'];
 
-function draw(id,arr,color,minSpan){
+function span2str(sp){if(sp<5400)return Math.round(sp/60)+'m';var hr=sp/3600;return (hr<10?hr.toFixed(1):Math.round(hr))+'h';}
+function draw(id,arr,color,minSpan,iv){
   var c=$(id);if(!c)return;var dpr=window.devicePixelRatio||1;
   var w=c.clientWidth,h=c.clientHeight;c.width=w*dpr;c.height=h*dpr;
   var x=c.getContext('2d');x.scale(dpr,dpr);x.clearRect(0,0,w,h);
@@ -204,7 +205,9 @@ function draw(id,arr,color,minSpan){
   // flat instead of a dramatic slope; then add headroom padding.
   var mid=(dmn+dmx)/2,span=Math.max(dmx-dmn,minSpan);
   var lo=mid-span/2-span*0.18,hi=mid+span/2+span*0.18,rng=(hi-lo)||1;
-  var pad=6,gx=w-pad*2,gy=h-pad*2,n=arr.length,lx=0,ly=0;
+  // bot reserves a row for the time axis. Points still fill the full width; the
+  // axis label shows the ACTUAL span, so it reads right even with little data.
+  var pad=6,bot=11,gx=w-pad*2,gy=h-pad-bot,n=arr.length,lx=0,ly=0;
   x.strokeStyle=color;x.lineWidth=1.8;x.beginPath();var started=false;
   for(var i=0;i<n;i++){var p=arr[i];if(p==null||isNaN(p)){started=false;continue;}
     var px=pad+gx*(i/(n-1)),py=pad+gy*(1-(p-lo)/rng);
@@ -212,11 +215,14 @@ function draw(id,arr,color,minSpan){
   x.stroke();
   x.fillStyle=color;x.beginPath();x.arc(lx,ly,2.4,0,6.2832);x.fill();  // latest point
   x.fillStyle='#6e7d90';x.font='10px sans-serif';                       // actual data range
-  x.fillText(dmx.toFixed(1),2,10);x.fillText(dmn.toFixed(1),2,h-2);
+  x.fillText(dmx.toFixed(1),2,9);x.fillText(dmn.toFixed(1),2,pad+gy);
+  x.font='9px sans-serif';                                              // time axis
+  x.fillText('-'+span2str((n-1)*(iv||300)),2,h-1);
+  x.textAlign='right';x.fillText('now',w-2,h-1);x.textAlign='left';
 }
-function redrawCharts(){if(!hist)return;
-  draw('cT',hist.t,'#f78166',2);draw('cRH',hist.rh,'#58a6ff',6);
-  draw('cP',hist.p,'#a371f7',4);draw('cI',hist.iaq,'#3fb950',25);}
+function redrawCharts(){if(!hist)return;var iv=hist.interval_s||300;
+  draw('cT',hist.t,'#f78166',2,iv);draw('cRH',hist.rh,'#58a6ff',6,iv);
+  draw('cP',hist.p,'#a371f7',4,iv);draw('cI',hist.iaq,'#3fb950',25,iv);}
 
 function poll(){fetch('/api/data').then(function(r){return r.json()}).then(function(d){
   $('conn').classList.toggle('bad',!(d.hdc_ok||d.bme_ok));
