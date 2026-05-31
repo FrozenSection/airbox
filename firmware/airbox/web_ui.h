@@ -137,15 +137,11 @@ small{color:#8493a8;display:block;margin-top:10px;line-height:1.4}
   </div>
   <div class="card">
     <div class="lbl">Export data (CSV)</div>
-    <p style="font-size:.88rem;color:#9fb0c3;margin:8px 0">Trend history is kept on
-    the device (survives reboots) — about 24 h at 5-minute spacing.</p>
-    <button class="act b-blue" id="csvAll">Download all</button>
-    <div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap;align-items:flex-end">
-      <div><label for="csvFrom" style="margin-top:0">From</label><input id="csvFrom" type="datetime-local" style="width:auto"></div>
-      <div><label for="csvTo" style="margin-top:0">To</label><input id="csvTo" type="datetime-local" style="width:auto"></div>
-      <button class="act b-grey" id="csvRange">Download range</button>
-    </div>
-    <small>Range uses the device's local time. Leave a field blank for open-ended.</small>
+    <p style="font-size:.88rem;color:#9fb0c3;margin:8px 0">Trend history is stored on
+    the device and survives reboots. It covers your selected <b>History window</b>
+    (Settings); set that to control how much is kept.</p>
+    <button class="act b-blue" id="csvAll">Download CSV</button>
+    <small>Columns: timestamp (device local time), temperature, humidity, pressure, IAQ.</small>
   </div></section>
 
   <section id="set" class="hide"><div class="card">
@@ -153,6 +149,8 @@ small{color:#8493a8;display:block;margin-top:10px;line-height:1.4}
     <label for="sUnit">Temperature unit</label>
     <select id="sUnit"><option value="F">Fahrenheit (°F)</option><option value="C">Celsius (°C)</option></select>
     <label for="sHost">mDNS hostname (.local)</label><input id="sHost">
+    <label for="sRet">History window (changing it clears past data)</label>
+    <select id="sRet"><option value="24">24 hours (~2 min/point)</option><option value="168">1 week (~14 min)</option><option value="720">1 month (~1 hr)</option><option value="8760">1 year (~12 hr)</option></select>
     <label for="sBright">Display brightness</label>
     <select id="sBright"><option value="8">Low (longest OLED life)</option><option value="64">Medium</option><option value="160">High</option><option value="255">Max</option></select>
     <div class="row" style="margin-top:12px"><input id="sNight" type="checkbox"><label for="sNight" style="margin:0">Night mode — blank or dim the screen on a schedule</label></div>
@@ -243,6 +241,7 @@ function loadHist(){fetch('/api/history').then(function(r){return r.json()}).the
 // settings
 function loadSettings(){fetch('/api/data').then(function(r){return r.json()}).then(function(d){
   $('sName').value=d.name||'';$('sUnit').value=d.unit||'F';$('sHost').value=d.hostname||'';
+  if(d.retention_h!=null)$('sRet').value=d.retention_h;
   if(d.brightness!=null)$('sBright').value=d.brightness;
   $('sNight').checked=!!d.night_en;
   $('sNMode').value=(d.night_mode!=null?d.night_mode:0);
@@ -256,7 +255,8 @@ $('save').onclick=function(){
         '&hostname='+encodeURIComponent($('sHost').value)+'&pass='+encodeURIComponent($('sPass').value)+
         '&brightness='+$('sBright').value+'&night_en='+($('sNight').checked?1:0)+
         '&night_mode='+$('sNMode').value+
-        '&night_start='+$('sNStart').value+'&night_end='+$('sNEnd').value+'&utc_off='+$('sUtc').value;
+        '&night_start='+$('sNStart').value+'&night_end='+$('sNEnd').value+'&utc_off='+$('sUtc').value+
+        '&retention='+$('sRet').value;
   if(!$('mqttBox').classList.contains('hide'))
     b+='&mqtt_host='+encodeURIComponent($('mHost').value)+'&mqtt_user='+encodeURIComponent($('mUser').value)+'&mqtt_pass='+encodeURIComponent($('mPass').value);
   fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b})
@@ -275,12 +275,6 @@ $('restart').onclick=act('/api/restart','Restart the device now?');
 // CSV export. datetime-local values are local time; convert to UTC epoch seconds
 // to match the stored timestamps.
 $('csvAll').onclick=function(){location.href='/api/history.csv'};
-$('csvRange').onclick=function(){
-  var q=[],f=$('csvFrom').value,t=$('csvTo').value;
-  if(f)q.push('from='+Math.floor(new Date(f).getTime()/1000));
-  if(t)q.push('to='+Math.floor(new Date(t).getTime()/1000));
-  location.href='/api/history.csv'+(q.length?('?'+q.join('&')):'');
-};
 
 loadSettings();poll();loadHist();
 setInterval(poll,4000);setInterval(loadHist,60000);

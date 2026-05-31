@@ -122,6 +122,7 @@ int histHead = 0;
 int histCount = 0;
 bool fsOK = false;                  // LittleFS mounted
 unsigned long lastHistSave = 0;
+uint32_t histIntervalMs = 0;        // derived from cfg.retentionHours / HISTORY_SAMPLES
 
 // =================== Runtime config (NVS "cfg") ===================
 struct Config {
@@ -137,6 +138,7 @@ struct Config {
   uint8_t nightEnd;
   uint8_t nightMode;    // 0 = blank (off), 1 = dim
   int8_t  utcOffsetH;   // local = UTC + this (for the night-mode clock)
+  uint16_t retentionHours;  // history window: 24 / 168 / 720 / 8760
 #if ENABLE_MQTT
   String mqttHost;
   String mqttUser;
@@ -168,7 +170,7 @@ volatile bool pendingFactoryReset = false;
 // Staging buffers for the above (written in handlers, read in loop()).
 String stgSsid, stgWifiPass;
 String stgName, stgUnit, stgHost, stgPass;
-String stgBright, stgNight, stgNStart, stgNEnd, stgNMode, stgUtc;
+String stgBright, stgNight, stgNStart, stgNEnd, stgNMode, stgUtc, stgRetention;
 #if ENABLE_MQTT
 String stgMqttHost, stgMqttUser, stgMqttPass;
 #endif
@@ -214,6 +216,7 @@ void loadConfig() {
   cfg.nightEnd   = cfgPrefs.getUChar("nEnd", DEFAULT_NIGHT_END);
   cfg.nightMode  = cfgPrefs.getUChar("nMode", DEFAULT_NIGHT_MODE);
   cfg.utcOffsetH = cfgPrefs.getChar("utc", DEFAULT_UTC_OFFSET_H);
+  cfg.retentionHours = cfgPrefs.getUShort("reth", DEFAULT_RETENTION_HOURS);
 #if ENABLE_MQTT
   cfg.mqttHost  = cfgPrefs.getString("mhost", "");
   cfg.mqttUser  = cfgPrefs.getString("muser", "");
@@ -239,7 +242,8 @@ void clearWifiCreds() {
   cfgPrefs.end();
 }
 
-void setContrast(uint8_t v);  // defined with the OLED rendering helpers
+void setContrast(uint8_t v);     // defined with the OLED rendering helpers
+void recomputeHistInterval();    // defined with the history helpers
 
 void applyAndSaveSettings() {
   if (stgName.length()) cfg.devName = stgName;
@@ -253,6 +257,13 @@ void applyAndSaveSettings() {
   if (stgNEnd.length())   cfg.nightEnd = (uint8_t)constrain(stgNEnd.toInt(), 0, 23);
   if (stgNMode.length())  cfg.nightMode = (stgNMode.toInt() != 0) ? 1 : 0;
   if (stgUtc.length())    cfg.utcOffsetH = (int8_t)constrain(stgUtc.toInt(), -12, 14);
+  // History retention: changing the window changes the sample cadence, so clear
+  // the buffer (and its file) to avoid mixed-spacing data; it refills fresh.
+  bool retentionChanged = false;
+  if (stgRetention.length()) {
+    uint16_t newR = (uint16_t)stgRetention.toInt();
+    if (newR != cfg.retentionHours) { cfg.retentionHours = newR; retentionChanged = true; }
+  }
   cfgPrefs.begin("cfg", false);
   cfgPrefs.putString("name", cfg.devName);
   cfgPrefs.putString("unit", String(cfg.unit));
@@ -264,6 +275,7 @@ void applyAndSaveSettings() {
   cfgPrefs.putUChar("nEnd", cfg.nightEnd);
   cfgPrefs.putUChar("nMode", cfg.nightMode);
   cfgPrefs.putChar("utc", cfg.utcOffsetH);
+  cfgPrefs.putUShort("reth", cfg.retentionHours);
 #if ENABLE_MQTT
   if (stgMqttHost.length()) cfg.mqttHost = stgMqttHost;
   if (stgMqttUser.length()) cfg.mqttUser = stgMqttUser;
@@ -276,6 +288,13 @@ void applyAndSaveSettings() {
   // Apply the display + clock changes live (we're in loop() context).
   if (displayOK) setContrast(cfg.brightness);
   configTime((long)cfg.utcOffsetH * 3600, 0, NTP_SERVER);
+  if (retentionChanged) {
+    recomputeHistInterval();
+    histHead = 0; histCount = 0;        // start fresh at the new cadence
+    if (fsOK) LittleFS.remove(HISTORY_FILE);
+    Serial.printf("Retention -> %u h (sample every %lu s)\n",
+                  cfg.retentionHours, (unsigned long)(histIntervalMs / 1000));
+  }
   Serial.println("Settings saved");
 }
 
@@ -436,6 +455,15 @@ void reinitHdc() {
   } else {
     Serial.println("HDC reinit failed (begin() returned false) — will retry in 5 min");
   }
+}
+
+// Sample spacing = retention window / fixed sample count. 64-bit intermediate
+// (1 year × 3.6M ms overflows uint32 before the divide).
+void recomputeHistInterval() {
+  uint16_t h = cfg.retentionHours;
+  if (h != 24 && h != 168 && h != 720 && h != 8760) h = DEFAULT_RETENTION_HOURS;
+  cfg.retentionHours = h;
+  histIntervalMs = (uint32_t)((uint64_t)h * 3600000ULL / HISTORY_SAMPLES);
 }
 
 void recordHistory() {
@@ -718,6 +746,7 @@ void buildDataJson(JsonDocument& doc) {
   doc["uptime"] = millis() / 1000;
   doc["heap"] = ESP.getFreeHeap();
   doc["reset_reason"] = resetReasonName();
+  doc["retention_h"] = cfg.retentionHours;
   if (s.hdcLastGoodMs > 0) doc["hdc_age"] = (millis() - s.hdcLastGoodMs) / 1000;
   if (s.bmeLastGoodMs > 0) doc["bme_age"] = (millis() - s.bmeLastGoodMs) / 1000;
 #if ENABLE_MQTT
@@ -728,7 +757,7 @@ void buildDataJson(JsonDocument& doc) {
 }
 
 void buildHistoryJson(JsonDocument& doc) {
-  doc["interval_s"] = HISTORY_INTERVAL_MS / 1000;
+  doc["interval_s"] = histIntervalMs / 1000;
   doc["unit"] = String(cfg.unit);
   JsonArray at = doc["t"].to<JsonArray>();
   JsonArray arh = doc["rh"].to<JsonArray>();
@@ -807,7 +836,7 @@ void registerRunRoutes() {
     stgName = P("name"); stgUnit = P("unit"); stgHost = P("hostname"); stgPass = P("pass");
     stgBright = P("brightness"); stgNight = P("night_en");
     stgNStart = P("night_start"); stgNEnd = P("night_end");
-    stgNMode = P("night_mode"); stgUtc = P("utc_off");
+    stgNMode = P("night_mode"); stgUtc = P("utc_off"); stgRetention = P("retention");
 #if ENABLE_MQTT
     stgMqttHost = P("mqtt_host"); stgMqttUser = P("mqtt_user"); stgMqttPass = P("mqtt_pass");
 #endif
@@ -1198,6 +1227,7 @@ void setup() {
   deviceId = String(buf);
 
   loadConfig();
+  recomputeHistInterval();
   if (displayOK) setContrast(cfg.brightness);  // apply saved brightness early
 
   // Mount LittleFS and restore the trend history so charts survive a reboot.
@@ -1322,7 +1352,7 @@ void loop() {
     updateRunDisplay();
   }
 
-  if (now - lastHistMs >= HISTORY_INTERVAL_MS) {
+  if (now - lastHistMs >= histIntervalMs) {
     lastHistMs = now;
     recordHistory();
   }

@@ -10,7 +10,9 @@
 #define CONFIG_H
 
 // ----- Firmware identity -----
-#define FW_VERSION        "1.0.0"
+// Bump on every change we flash, so the OLED header / dashboard confirm which
+// build is actually running (handy for verifying an OTA took).
+#define FW_VERSION        "1.1.0"
 #define DEVICE_MODEL      "QT Py ESP32-S3 + BME688 + HDC3022 (standalone)"
 
 // ----- Feature flags -----
@@ -60,10 +62,16 @@
 // charts survive a reboot/power-cycle, with a UTC timestamp per sample for the
 // CSV export. Requires a partition scheme WITH a filesystem AND OTA — build
 // with "Minimal SPIFFS (1.9MB APP with OTA/128KB SPIFFS)" (see firmware/README).
-#define HISTORY_SAMPLES          288
-#define HISTORY_INTERVAL_MS      300000UL    // 5 minutes
+// Fixed-size buffer: bounds RAM, flash, and dashboard payload. The sample
+// spacing is derived from the chosen retention window (window / SAMPLES), so a
+// longer window just spreads the same points further apart — you can't run out
+// of space. 720 points ≈ 14 KB.
+#define HISTORY_SAMPLES          720
 #define HISTORY_SAVE_INTERVAL_MS 1800000UL   // flush history to flash every 30 min
 #define HISTORY_FILE             "/hist.bin"
+// Retention window options (hours), selectable in the web UI:
+//   24 = 1 day, 168 = 1 week, 720 = 1 month, 8760 = 1 year.
+#define DEFAULT_RETENTION_HOURS  24
 
 // ----- Pins / hardware -----
 #define I2C_SDA_PIN       41                 // STEMMA QT (Wire1)
