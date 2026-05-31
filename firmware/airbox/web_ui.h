@@ -137,10 +137,10 @@ small{color:#8493a8;display:block;margin-top:10px;line-height:1.4}
   </div>
   <div class="card">
     <div class="lbl">Export data (CSV)</div>
-    <p style="font-size:.88rem;color:#9fb0c3;margin:8px 0">Trend history is stored on
-    the device and survives reboots. It covers your selected <b>History window</b>
-    (Settings); set that to control how much is kept.</p>
-    <button class="act b-blue" id="csvAll">Download CSV</button>
+    <p style="font-size:.88rem;color:#9fb0c3;margin:8px 0">Downloads the
+    <b>last 7 days</b> of readings at 5-minute spacing (stored on the device,
+    survives reboots). The dashboard chart above shows the most recent 24 h.</p>
+    <button class="act b-blue" id="csvAll">Download CSV (7 days)</button>
     <small>Columns: timestamp (device local time), temperature, humidity, pressure, IAQ.</small>
   </div></section>
 
@@ -149,8 +149,6 @@ small{color:#8493a8;display:block;margin-top:10px;line-height:1.4}
     <label for="sUnit">Temperature unit</label>
     <select id="sUnit"><option value="F">Fahrenheit (°F)</option><option value="C">Celsius (°C)</option></select>
     <label for="sHost">mDNS hostname (.local)</label><input id="sHost">
-    <label for="sRet">History window (changing it clears past data)</label>
-    <select id="sRet"><option value="24">24 hours (~2 min/point)</option><option value="168">1 week (~14 min)</option><option value="720">1 month (~1 hr)</option><option value="8760">1 year (~12 hr)</option></select>
     <label for="sBright">Display brightness</label>
     <select id="sBright"><option value="8">Low (longest OLED life)</option><option value="64">Medium</option><option value="160">High</option><option value="255">Max</option></select>
     <div class="row" style="margin-top:12px"><input id="sNight" type="checkbox"><label for="sNight" style="margin:0">Night mode — blank or dim the screen on a schedule</label></div>
@@ -160,8 +158,8 @@ small{color:#8493a8;display:block;margin-top:10px;line-height:1.4}
       <div style="flex:1"><label for="sNStart">From (hour, 0–23)</label><input id="sNStart" type="number" min="0" max="23"></div>
       <div style="flex:1"><label for="sNEnd">Back to normal at (hour)</label><input id="sNEnd" type="number" min="0" max="23"></div>
     </div>
-    <label for="sUtc">UTC offset (hours) — needed for the night-mode clock</label>
-    <input id="sUtc" type="number" min="-12" max="14" step="1">
+    <label for="sTz">Timezone (for timestamps &amp; night-mode clock; DST automatic)</label>
+    <select id="sTz"><option value="0">UTC</option><option value="1">Eastern (New York)</option><option value="2">Central (Chicago)</option><option value="3">Mountain (Denver)</option><option value="4">Arizona (no DST)</option><option value="5">Pacific (Los Angeles)</option><option value="6">Alaska (Anchorage)</option><option value="7">Hawaii (no DST)</option><option value="8">UK (London)</option><option value="9">Central Europe</option><option value="10">India (Kolkata)</option><option value="11">Japan (Tokyo)</option><option value="12">Sydney</option></select>
     <label for="sPass">Admin password (blank = keep current)</label>
     <input id="sPass" type="password" placeholder="protects updates &amp; settings" autocomplete="off">
     <div id="mqttBox" class="hide">
@@ -241,13 +239,12 @@ function loadHist(){fetch('/api/history').then(function(r){return r.json()}).the
 // settings
 function loadSettings(){fetch('/api/data').then(function(r){return r.json()}).then(function(d){
   $('sName').value=d.name||'';$('sUnit').value=d.unit||'F';$('sHost').value=d.hostname||'';
-  if(d.retention_h!=null)$('sRet').value=d.retention_h;
   if(d.brightness!=null)$('sBright').value=d.brightness;
   $('sNight').checked=!!d.night_en;
   $('sNMode').value=(d.night_mode!=null?d.night_mode:0);
   $('sNStart').value=(d.night_start!=null?d.night_start:23);
   $('sNEnd').value=(d.night_end!=null?d.night_end:7);
-  $('sUtc').value=(d.utc_off!=null?d.utc_off:0);
+  $('sTz').value=(d.tz!=null?d.tz:0);
   if(d.mqtt_enabled){$('mqttBox').classList.remove('hide');$('mHost').value=d.mqtt_host||'';$('mUser').value=d.mqtt_user||'';}
 });}
 $('save').onclick=function(){
@@ -255,8 +252,7 @@ $('save').onclick=function(){
         '&hostname='+encodeURIComponent($('sHost').value)+'&pass='+encodeURIComponent($('sPass').value)+
         '&brightness='+$('sBright').value+'&night_en='+($('sNight').checked?1:0)+
         '&night_mode='+$('sNMode').value+
-        '&night_start='+$('sNStart').value+'&night_end='+$('sNEnd').value+'&utc_off='+$('sUtc').value+
-        '&retention='+$('sRet').value;
+        '&night_start='+$('sNStart').value+'&night_end='+$('sNEnd').value+'&tz='+$('sTz').value;
   if(!$('mqttBox').classList.contains('hide'))
     b+='&mqtt_host='+encodeURIComponent($('mHost').value)+'&mqtt_user='+encodeURIComponent($('mUser').value)+'&mqtt_pass='+encodeURIComponent($('mPass').value);
   fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b})

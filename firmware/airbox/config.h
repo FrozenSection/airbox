@@ -12,7 +12,7 @@
 // ----- Firmware identity -----
 // Bump on every change we flash, so the OLED header / dashboard confirm which
 // build is actually running (handy for verifying an OTA took).
-#define FW_VERSION        "1.1.0"
+#define FW_VERSION        "1.2.0"
 #define DEVICE_MODEL      "QT Py ESP32-S3 + BME688 + HDC3022 (standalone)"
 
 // ----- Feature flags -----
@@ -51,27 +51,25 @@
 #define DEFAULT_NIGHT_END    7
 #define DEFAULT_NIGHT_MODE   0               // 0 = blank (screen off), 1 = dim
 #define NIGHT_DIM_CONTRAST   4               // SSD1306 contrast used in dim mode (very low)
-#define DEFAULT_UTC_OFFSET_H 0               // local = UTC + this many hours (NTP)
+// Timezone is chosen from a named list (see TZ_TABLE in airbox.ino); stored as
+// an index. DST is handled automatically via the POSIX TZ rule. 0 = UTC.
+#define DEFAULT_TZ_INDEX     0
 #define NTP_SERVER           "pool.ntp.org"
 // Anti-burn-in: nudge the whole layout a few px on this cycle so static labels
 // never sit on the same pixels forever.
 #define PIXEL_SHIFT_INTERVAL_MS  300000UL    // 5 minutes
 
 // ----- Trend history ring buffer -----
-// 288 samples @ 5 min spacing = 24 h of trend. Persisted to LittleFS so the
-// charts survive a reboot/power-cycle, with a UTC timestamp per sample for the
-// CSV export. Requires a partition scheme WITH a filesystem AND OTA — build
-// with "Minimal SPIFFS (1.9MB APP with OTA/128KB SPIFFS)" (see firmware/README).
-// Fixed-size buffer: bounds RAM, flash, and dashboard payload. The sample
-// spacing is derived from the chosen retention window (window / SAMPLES), so a
-// longer window just spreads the same points further apart — you can't run out
-// of space. 720 points ≈ 14 KB.
-#define HISTORY_SAMPLES          720
+// Fixed 7 days at 5-minute spacing (2016 points ≈ 40 KB). Persisted to LittleFS
+// so it survives a reboot, with a UTC timestamp per sample. Requires a partition
+// scheme WITH a filesystem AND OTA — "Minimal SPIFFS (1.9MB APP with OTA/128KB
+// SPIFFS)" (see firmware/README). The dashboard chart shows the most recent
+// CHART_SAMPLES (24 h); the CSV export covers the whole 7 days.
+#define HISTORY_SAMPLES          2016        // 7 days @ 5 min
+#define HISTORY_INTERVAL_MS      300000UL    // 5 minutes
+#define CHART_SAMPLES            288         // dashboard chart window: last 24 h
 #define HISTORY_SAVE_INTERVAL_MS 1800000UL   // flush history to flash every 30 min
 #define HISTORY_FILE             "/hist.bin"
-// Retention window options (hours), selectable in the web UI:
-//   24 = 1 day, 168 = 1 week, 720 = 1 month, 8760 = 1 year.
-#define DEFAULT_RETENTION_HOURS  24
 
 // ----- Pins / hardware -----
 #define I2C_SDA_PIN       41                 // STEMMA QT (Wire1)
