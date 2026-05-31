@@ -117,10 +117,15 @@ small{color:#8493a8;display:block;margin-top:10px;line-height:1.4}
 .sub.off{opacity:.4}
 .hint{font-size:.78rem;color:#7d8da0;font-weight:400;text-transform:none;letter-spacing:0}
 input:disabled,select:disabled{opacity:.55;cursor:not-allowed}
+.sig{font-size:.72rem;color:#6e7d90;text-decoration:none;display:block;margin-top:1px}
+.sig:hover{color:#9fb0c3}
 </style></head><body>
 <header>
-  <h1 id="name">AirBox</h1>
-  <div><span class="dot" id="conn"></span><span id="stamp">—</span></div>
+  <div>
+    <h1 id="name">AirBox</h1>
+    <a class="sig" href="https://github.com/FrozenSection/airbox" target="_blank" rel="noopener">github.com/FrozenSection/airbox</a>
+  </div>
+  <div style="text-align:right"><span class="dot" id="conn"></span><span id="stamp">—</span></div>
 </header>
 <div class="tabs">
   <button class="on" data-t="dash">Dashboard</button>
@@ -185,7 +190,7 @@ input:disabled,select:disabled{opacity:.55;cursor:not-allowed}
     <div class="card">
       <div class="lbl">Security</div>
       <label for="sPass">Admin Password <span class="hint">— blank = keep current</span></label>
-      <input id="sPass" type="password" placeholder="protects updates &amp; settings" autocomplete="off">
+      <input id="sPass" type="password" placeholder="OTA + Settings auth" autocomplete="off">
     </div>
 
     <div class="card hide" id="mqttBox">
