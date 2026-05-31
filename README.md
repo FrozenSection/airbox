@@ -35,6 +35,10 @@ bus, `Wire1`). See [`hardware/`](hardware/) for the enclosure.
 
 ## Getting started
 
+> **Just received a device?** The one-page
+> [`docs/quick-start.md`](docs/quick-start.md) gets you from power-on to the
+> dashboard in four steps.
+>
 > Assembling and flashing a new unit? The step-by-step
 > [`docs/bringup-checklist.md`](docs/bringup-checklist.md) walks the whole
 > process — assemble → flash → provision → verify → burn-in.
