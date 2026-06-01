@@ -1,64 +1,81 @@
 # Using the dashboard
 
 Open `http://airbox.local` on any device on the same WiFi network. The page has
-three tabs.
+three tabs: **Dashboard**, **Diagnostics**, **Settings**.
 
 ## Dashboard tab
 
-The four primary readings, each with a 24-hour trend chart:
+### Comfort verdict
+At the top, a plain-language **verdict** summarizes the room from the temperature
+and humidity against your **Comfort targets** (set in Settings) — e.g.
+*Comfortable, Cool, Warm, Dry, Humid, Cold & dry, Warm & humid…* — with a
+one-line suggestion (e.g. "the air is dry — a humidifier would help"). The page's
+accent tint shifts with it. It's an interpretation layered on top of the numbers;
+the raw readings are always shown below.
+
+### The four readings
+Each with a 24-hour trend chart:
 
 | Reading | Source | Notes |
 |---|---|---|
 | **Temperature** | HDC3022 | Primary, lab-grade (±0.1 °C). Shown in your chosen °F/°C. |
 | **Humidity** | HDC3022 | Primary (±0.5 % RH). |
-| **Pressure** | BME688 | Barometric pressure (hPa). Great for spotting weather trends. |
+| **Pressure** | BME688 | Barometric pressure (hPa). Good for spotting weather trends. |
 | **Air Quality (IAQ)** | BME688 + BSEC2 | 0 = excellent … 500 = very poor. See calibration note below. |
 
-Charts hold ~24 hours of history (a sample every 5 minutes). They live in the
-device's RAM, so they reset on reboot and fill back in over time.
+The **Temperature** and **Humidity** tiles also show a **range bar** marking where
+the current value sits within your ideal band (`ideal X–Y`).
+
+Charts show the most recent **~24 hours** (a sample every 5 minutes) with a
+time axis (`-Xh … now`). History is saved to flash, so it **survives a reboot**
+and keeps up to **7 days** for CSV export (Diagnostics tab).
 
 ## Diagnostics tab
 
-The less-essential and raw values, kept out of the main view:
+The raw/secondary values and device health, grouped by subsystem:
 
-- **Raw BME688 temperature / humidity** — these read a bit high because the
-  BME688's gas heater warms the chip. Trust the HDC3022 on the Dashboard tab for
-  ambient T/RH; the raw values are here for reference.
-- **eCO₂ / bVOC** — BSEC2 *estimates* derived from the same gas signal that
-  drives IAQ, so they track IAQ closely rather than adding independent
-  information. Shown for completeness.
-- **WiFi RSSI, uptime, free heap** — device health.
-- **Sensor status & reading age** — each sensor reports OK/fault and seconds
-  since its last good reading, so a flaky connection is visible.
-- **Firmware version.**
+- **Sensors** — each sensor's status (OK/fault), seconds since its last good
+  reading, and the BME688's **calibration** state (0–3).
+- **Air quality detail** — **raw BME688 temperature / humidity** (these read a
+  bit high because the gas heater warms the chip — trust the HDC3022 on the
+  Dashboard for ambient T/RH), plus **eCO₂ / bVOC**, which are BSEC2 *estimates*
+  from the same gas signal as IAQ (they track IAQ rather than adding independent
+  info).
+- **Network** — IP address, hostname, WiFi SSID, signal strength (RSSI).
+- **System** — firmware version, uptime, free heap, and **last reset reason**
+  (Power-on / Brownout / Task WDT / Software / Panic — handy for diagnosing an
+  unexpected restart).
+- **Export data (CSV)** — **Download CSV** grabs the last 7 days at 5-minute
+  spacing (timestamp, temperature, humidity, pressure, IAQ).
 
 ## Settings tab
 
-- **Device name** — shown in the header, on the OLED, and in the browser title.
-- **Temperature unit** — °F or °C (applies to the live readings and charts).
-- **mDNS hostname** — changes the `.local` address (applies after a restart).
-- **Display brightness** — Low / Medium / High / Max OLED contrast. Lower is
-  gentler on the panel and meaningfully extends its life; the default is Medium.
-- **Night mode** — between the hours you set (e.g. 23 → 7) the OLED either
-  **turns fully off (blank)** or just **dims** — your choice in Settings; blank
-  is the default and saves the most panel life. Needs the **UTC offset** set so
-  the device knows the local time (it syncs the clock over the internet via
-  NTP). Leave night mode off to keep the screen always on. The dashboard and
-  sensors keep running regardless of the screen state, so you can always check
-  data or change settings from the web portal even while the screen is dark.
-- **Admin password** — protects firmware updates and settings. Leave blank to
-  keep the current one. **Change the default (`airbox`) after first setup.**
-- **Firmware update** — opens the browser OTA uploader.
-- **Recalibrate air sensor** — clears the BSEC baseline (IAQ accuracy → 0).
-- **Reconfigure WiFi** / **Restart** — see [recovery.md](recovery.md).
+Grouped into sections:
+
+- **Device** — Device Name (header / OLED / browser title), Temperature Unit
+  (°F/°C), mDNS Hostname (the `.local` address; applies after restart), and
+  **Time Zone** (a named zone — DST is handled automatically; used for
+  timestamps and the night-mode clock, synced over NTP).
+- **Comfort targets** — the ideal **temperature** and **humidity** bands that
+  drive the verdict and range bars, entered in your chosen unit. Applies on save.
+- **Display** — **Brightness** (Low / Medium / High / Max OLED contrast; lower
+  meaningfully extends panel life, default Medium) and **Night Mode** (between
+  the hours you set, the OLED either **blanks** or **dims** — your choice; the
+  sub-options grey out when it's off). The dashboard and sensors keep running
+  even while the screen is dark.
+- **Security** — Admin Password (protects firmware updates and settings; blank
+  keeps the current one). **Change the default (`airbox`) after first setup.**
+- **Maintenance** — Firmware update (browser OTA), Recalibrate air sensor
+  (clears the BSEC baseline → IAQ accuracy 0), Reconfigure WiFi, Restart (the
+  last two: see [recovery.md](recovery.md)).
 
 ## About IAQ calibration
 
-The **calibration** indicator under the IAQ reading climbs from *unreliable* →
-*low* → *medium* → *high* over the first 24–48 hours as BSEC2 learns your
-environment's baseline. Until it reaches *medium/high*, treat IAQ as a relative
-trend rather than an absolute number. The learned calibration is saved to flash
-and restored on reboot, so this only happens once (unless you recalibrate).
+The **calibration** indicator (Diagnostics tab) climbs from *unreliable* → *low*
+→ *medium* → *high* over the first 24–48 hours as BSEC2 learns your environment's
+baseline. Until it reaches *medium/high*, treat IAQ as a relative trend rather
+than an absolute number. The learned calibration is saved to flash and restored
+on reboot, so this only happens once (unless you recalibrate).
 
 ## Air-quality reference (rough)
 
