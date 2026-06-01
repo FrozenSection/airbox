@@ -249,7 +249,7 @@ input::placeholder{color:rgba(244,239,232,.32)}
         <div class="metric">
           <div class="top"><span class="uc">Temperature</span></div>
           <div class="big"><span class="val" id="tVal">—</span><span class="unit" id="tUnit">°F</span></div>
-          <canvas id="cT" height="44"></canvas><div class="axis"><span>−24h</span><span>now</span></div>
+          <canvas id="cT" height="44"></canvas><div class="axis"><span class="axL">−24h</span><span>now</span></div>
           <div style="margin-top:14px"><div class="bar" id="tBar"><div class="band"></div><div class="mark"></div></div>
             <div class="barcap"><span id="tIdeal">ideal</span><span id="tDelta"></span></div></div>
         </div>
@@ -257,7 +257,7 @@ input::placeholder{color:rgba(244,239,232,.32)}
         <div class="metric">
           <div class="top"><span class="uc">Humidity</span></div>
           <div class="big"><span class="val" id="hVal">—</span><span class="unit">%</span></div>
-          <canvas id="cH" height="44"></canvas><div class="axis"><span>−24h</span><span>now</span></div>
+          <canvas id="cH" height="44"></canvas><div class="axis"><span class="axL">−24h</span><span>now</span></div>
           <div style="margin-top:14px"><div class="bar" id="hBar"><div class="band"></div><div class="mark"></div></div>
             <div class="barcap"><span id="hIdeal">ideal</span><span id="hDelta"></span></div></div>
         </div>
@@ -268,12 +268,12 @@ input::placeholder{color:rgba(244,239,232,.32)}
       <div class="card scard">
         <div class="top"><span class="uc">Pressure</span></div>
         <div class="srow"><div class="big" style="margin:0"><span class="val" id="pVal">—</span><span class="unit">hPa</span></div></div>
-        <canvas id="cP" height="38"></canvas><div class="axis"><span>−24h</span><span>now</span></div>
+        <canvas id="cP" height="38"></canvas><div class="axis"><span class="axL">−24h</span><span>now</span></div>
       </div>
       <div class="card scard">
         <div class="top"><span class="uc">Air Quality</span><span class="pill" id="iPill"></span></div>
         <div class="srow"><div class="big" style="margin:0"><span class="val" id="iVal">—</span><span class="unit">IAQ</span></div></div>
-        <canvas id="cI" height="38"></canvas><div class="axis"><span>−24h</span><span>now</span></div>
+        <canvas id="cI" height="38"></canvas><div class="axis"><span class="axL">−24h</span><span>now</span></div>
         <div class="cal" id="iCal"></div>
       </div>
       <div class="card scard" style="justify-content:center;gap:9px">
@@ -418,7 +418,7 @@ function chart(id,arr,color,minSpan){
   var v=(arr||[]).filter(function(p){return p!=null&&!isNaN(p);});
   if(v.length<2){x.fillStyle='rgba(244,239,232,.4)';x.font='11px system-ui';x.fillText('collecting…',2,h/2);return;}
   var dmn=Math.min.apply(null,v),dmx=Math.max.apply(null,v),mid=(dmn+dmx)/2,span=Math.max(dmx-dmn,minSpan||1);
-  var lo=mid-span/2-span*0.10,hi=mid+span/2+span*0.10,rng=(hi-lo)||1,n=arr.length,pad=5;
+  var lo=mid-span/2-span*0.05,hi=mid+span/2+span*0.05,rng=(hi-lo)||1,n=arr.length,pad=5;
   function X(i){return (n<2)?0:(i/(n-1))*w;} function Y(p){return pad+(h-2*pad)*(1-(p-lo)/rng);}
   // area
   var grad=x.createLinearGradient(0,0,0,h); grad.addColorStop(0,color); grad.addColorStop(1,'transparent');
@@ -434,8 +434,18 @@ function chart(id,arr,color,minSpan){
   x.stroke();
   x.fillStyle=color;x.beginPath();x.arc(lx,ly,3,0,6.2832);x.fill();
 }
+// Left axis label = the actual span of data present, so it reads e.g. -15m
+// early on and grows to -24h once the 24 h chart window is full.
+function spanLabel(){
+  if(!HIST||!HIST.t||HIST.t.length<2) return '−24h';
+  var sp=(HIST.t.length-1)*(HIST.interval_s||300);
+  if(sp<5400) return '−'+Math.round(sp/60)+'m';
+  var hr=sp/3600; return '−'+(hr<10?hr.toFixed(1):Math.round(hr))+'h';
+}
 function redraw(){ if(!HIST)return;
-  chart('cT',HIST.t,SIG.t,1); chart('cH',HIST.rh,SIG.h,3); chart('cP',HIST.p,SIG.p,2); chart('cI',HIST.iaq,SIG.i,12);
+  chart('cT',HIST.t,SIG.t,0.7); chart('cH',HIST.rh,SIG.h,2); chart('cP',HIST.p,SIG.p,1.5); chart('cI',HIST.iaq,SIG.i,8);
+  var lbl=spanLabel(), ax=document.querySelectorAll('.axL');
+  for(var k=0;k<ax.length;k++) ax[k].textContent=lbl;
 }
 
 /* ---- range bar ---- */
