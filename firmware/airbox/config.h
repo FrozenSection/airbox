@@ -12,7 +12,7 @@
 // ----- Firmware identity -----
 // Bump on every change we flash, so the OLED header / dashboard confirm which
 // build is actually running (handy for verifying an OTA took).
-#define FW_VERSION        "1.3.1"
+#define FW_VERSION        "1.3.2"
 #define DEVICE_MODEL      "QT Py ESP32-S3 + BME688 + HDC3022 (standalone)"
 
 // ----- Feature flags -----

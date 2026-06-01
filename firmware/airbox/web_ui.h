@@ -418,7 +418,7 @@ function chart(id,arr,color,minSpan){
   var v=(arr||[]).filter(function(p){return p!=null&&!isNaN(p);});
   if(v.length<2){x.fillStyle='rgba(244,239,232,.4)';x.font='11px system-ui';x.fillText('collecting…',2,h/2);return;}
   var dmn=Math.min.apply(null,v),dmx=Math.max.apply(null,v),mid=(dmn+dmx)/2,span=Math.max(dmx-dmn,minSpan||1);
-  var lo=mid-span/2-span*0.18,hi=mid+span/2+span*0.18,rng=(hi-lo)||1,n=arr.length,pad=5;
+  var lo=mid-span/2-span*0.10,hi=mid+span/2+span*0.10,rng=(hi-lo)||1,n=arr.length,pad=5;
   function X(i){return (n<2)?0:(i/(n-1))*w;} function Y(p){return pad+(h-2*pad)*(1-(p-lo)/rng);}
   // area
   var grad=x.createLinearGradient(0,0,0,h); grad.addColorStop(0,color); grad.addColorStop(1,'transparent');
@@ -435,7 +435,7 @@ function chart(id,arr,color,minSpan){
   x.fillStyle=color;x.beginPath();x.arc(lx,ly,3,0,6.2832);x.fill();
 }
 function redraw(){ if(!HIST)return;
-  chart('cT',HIST.t,SIG.t,2); chart('cH',HIST.rh,SIG.h,6); chart('cP',HIST.p,SIG.p,4); chart('cI',HIST.iaq,SIG.i,25);
+  chart('cT',HIST.t,SIG.t,1); chart('cH',HIST.rh,SIG.h,3); chart('cP',HIST.p,SIG.p,2); chart('cI',HIST.iaq,SIG.i,12);
 }
 
 /* ---- range bar ---- */
