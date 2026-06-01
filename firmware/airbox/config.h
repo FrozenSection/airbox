@@ -12,7 +12,7 @@
 // ----- Firmware identity -----
 // Bump on every change we flash, so the OLED header / dashboard confirm which
 // build is actually running (handy for verifying an OTA took).
-#define FW_VERSION        "1.2.5"
+#define FW_VERSION        "1.3.0"
 #define DEVICE_MODEL      "QT Py ESP32-S3 + BME688 + HDC3022 (standalone)"
 
 // ----- Feature flags -----
@@ -38,6 +38,14 @@
 #define DEFAULT_HOSTNAME     "airbox"        // -> http://airbox.local
 #define DEFAULT_TEMP_UNIT    'F'             // 'F' or 'C'
 #define DEFAULT_ADMIN_PASS   "airbox"        // protects /update and Settings; CHANGE in UI
+
+// ----- Comfort targets (dashboard verdict + range bars) -----
+// Stored in °C (canonical, like all temps); the web UI edits in the display
+// unit and the firmware converts. Humidity is unit-agnostic %.
+#define DEFAULT_COMFORT_TMIN_C  20.0f   // 68 °F
+#define DEFAULT_COMFORT_TMAX_C  24.4f   // 76 °F
+#define DEFAULT_COMFORT_HMIN    40
+#define DEFAULT_COMFORT_HMAX    60
 
 // ----- OLED longevity (all overridable in the web Settings page) -----
 // SSD1306 contrast 0-255. Lower current = longer OLED life; the UI exposes

@@ -158,6 +158,8 @@ struct Config {
   uint8_t nightEnd;
   uint8_t nightMode;    // 0 = blank (off), 1 = dim
   uint8_t tzIndex;      // index into TZ_TABLE (DST-aware local time)
+  float   comfortTminC, comfortTmaxC;   // comfort band, °C canonical
+  uint8_t comfortHmin,  comfortHmax;    // comfort band, %
 #if ENABLE_MQTT
   String mqttHost;
   String mqttUser;
@@ -190,6 +192,7 @@ volatile bool pendingFactoryReset = false;
 String stgSsid, stgWifiPass;
 String stgName, stgUnit, stgHost, stgPass;
 String stgBright, stgNight, stgNStart, stgNEnd, stgNMode, stgTz;
+String stgCtmin, stgCtmax, stgChmin, stgChmax, stgCunit;
 #if ENABLE_MQTT
 String stgMqttHost, stgMqttUser, stgMqttPass;
 #endif
@@ -236,6 +239,10 @@ void loadConfig() {
   cfg.nightMode  = cfgPrefs.getUChar("nMode", DEFAULT_NIGHT_MODE);
   cfg.tzIndex = cfgPrefs.getUChar("tz", DEFAULT_TZ_INDEX);
   if (cfg.tzIndex >= TZ_COUNT) cfg.tzIndex = DEFAULT_TZ_INDEX;
+  cfg.comfortTminC = cfgPrefs.getFloat("ctmin", DEFAULT_COMFORT_TMIN_C);
+  cfg.comfortTmaxC = cfgPrefs.getFloat("ctmax", DEFAULT_COMFORT_TMAX_C);
+  cfg.comfortHmin  = cfgPrefs.getUChar("chmin", DEFAULT_COMFORT_HMIN);
+  cfg.comfortHmax  = cfgPrefs.getUChar("chmax", DEFAULT_COMFORT_HMAX);
 #if ENABLE_MQTT
   cfg.mqttHost  = cfgPrefs.getString("mhost", "");
   cfg.mqttUser  = cfgPrefs.getString("muser", "");
@@ -285,6 +292,11 @@ void applyAndSaveSettings() {
     uint8_t t = (uint8_t)stgTz.toInt();
     cfg.tzIndex = (t < TZ_COUNT) ? t : 0;
   }
+  // Comfort targets — temp bands arrive in comfort_unit; store canonical °C.
+  if (stgCtmin.length()) cfg.comfortTminC = (stgCunit == "F") ? (stgCtmin.toFloat() - 32.0f) * 5.0f / 9.0f : stgCtmin.toFloat();
+  if (stgCtmax.length()) cfg.comfortTmaxC = (stgCunit == "F") ? (stgCtmax.toFloat() - 32.0f) * 5.0f / 9.0f : stgCtmax.toFloat();
+  if (stgChmin.length()) cfg.comfortHmin = (uint8_t)constrain(stgChmin.toInt(), 0, 100);
+  if (stgChmax.length()) cfg.comfortHmax = (uint8_t)constrain(stgChmax.toInt(), 0, 100);
   cfgPrefs.begin("cfg", false);
   cfgPrefs.putString("name", cfg.devName);
   cfgPrefs.putString("unit", String(cfg.unit));
@@ -296,6 +308,10 @@ void applyAndSaveSettings() {
   cfgPrefs.putUChar("nEnd", cfg.nightEnd);
   cfgPrefs.putUChar("nMode", cfg.nightMode);
   cfgPrefs.putUChar("tz", cfg.tzIndex);
+  cfgPrefs.putFloat("ctmin", cfg.comfortTminC);
+  cfgPrefs.putFloat("ctmax", cfg.comfortTmaxC);
+  cfgPrefs.putUChar("chmin", cfg.comfortHmin);
+  cfgPrefs.putUChar("chmax", cfg.comfortHmax);
 #if ENABLE_MQTT
   if (stgMqttHost.length()) cfg.mqttHost = stgMqttHost;
   if (stgMqttUser.length()) cfg.mqttUser = stgMqttUser;
@@ -756,6 +772,11 @@ void buildDataJson(JsonDocument& doc) {
   doc["night_end"] = cfg.nightEnd;
   doc["night_mode"] = cfg.nightMode;
   doc["tz"] = cfg.tzIndex;
+  JsonObject cm = doc["comfort"].to<JsonObject>();
+  cm["tmin"] = (int)lroundf(toUnit(cfg.comfortTminC));
+  cm["tmax"] = (int)lroundf(toUnit(cfg.comfortTmaxC));
+  cm["hmin"] = cfg.comfortHmin;
+  cm["hmax"] = cfg.comfortHmax;
   if (hdcOK && s.hdcValid) {
     doc["temp"] = toUnit(s.hdcTempC);
     doc["rh"] = s.hdcRH;
@@ -864,6 +885,8 @@ void registerRunRoutes() {
     stgBright = P("brightness"); stgNight = P("night_en");
     stgNStart = P("night_start"); stgNEnd = P("night_end");
     stgNMode = P("night_mode"); stgTz = P("tz");
+    stgCtmin = P("comfort_tmin"); stgCtmax = P("comfort_tmax");
+    stgChmin = P("comfort_hmin"); stgChmax = P("comfort_hmax"); stgCunit = P("comfort_unit");
 #if ENABLE_MQTT
     stgMqttHost = P("mqtt_host"); stgMqttUser = P("mqtt_user"); stgMqttPass = P("mqtt_pass");
 #endif
