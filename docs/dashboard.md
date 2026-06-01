@@ -77,13 +77,18 @@ baseline. Until it reaches *medium/high*, treat IAQ as a relative trend rather
 than an absolute number. The learned calibration is saved to flash and restored
 on reboot, so this only happens once (unless you recalibrate).
 
-## Air-quality reference (rough)
+## Air-quality reference
 
-| IAQ | Meaning |
+The IAQ tile shows the **descriptor** for the current level (with a green→red dot)
+and the **Air quality note** card explains it and suggests what to do. The bands
+are Bosch's BSEC IAQ classification:
+
+| IAQ | Descriptor |
 |---|---|
 | 0–50 | Excellent |
 | 51–100 | Good |
 | 101–150 | Lightly polluted |
 | 151–200 | Moderately polluted |
-| 201–300 | Heavily polluted |
-| 301–500 | Severely polluted — ventilate |
+| 201–250 | Heavily polluted |
+| 251–350 | Severely polluted |
+| 351–500 | Extremely polluted |

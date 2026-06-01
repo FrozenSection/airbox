@@ -25,13 +25,26 @@ function fmt(v,d){return (v==null||isNaN(v))?'—':Number(v).toFixed(d==null?1:d
 function tcat(v,c){return v<c.tmin?'cold':(v>c.tmax?'warm':'ok');}
 function hcat(v,c){return v<c.hmin?'dry':(v>c.hmax?'humid':'ok');}
 function comfort(t,h,c){var k=tcat(t,c)+'|'+hcat(h,c);var m=MX[k]||MX['ok|ok'];return {word:m[0],note:m[1],color:CC[k]||CC['ok|ok']};}
-function iaqStat(v){if(v<=50)return['Good',ST.good];if(v<=100)return['Fair',ST.fair];if(v<=150)return['Moderate',ST.mod];return['Poor',ST.poor];}
-function iaqInfo(acc,v){
-  if(acc===0)return{label:'unreliable',done:false,body:'The BME688 just powered on — IAQ isn’t reliable yet. It warms up for a few minutes, then keeps learning the room over 24–48 h.'};
-  if(acc===2)return{label:'medium',done:false,body:'IAQ is moderate ('+v+'). The sensor is partway calibrated — readings are usable and still sharpening.'};
-  if(acc>=3)return{label:'high',done:true,body:'Air quality is moderate ('+v+') and the sensor is fully calibrated. Levels like this usually mean cooking, cleaning, or low ventilation — a little fresh air brings it down.'};
-  return{label:'low',done:false,body:'IAQ is moderate ('+v+'). The BME688 is still self-calibrating — accuracy is low and improves over the first 24–48 h.'};
-}
+// Bosch BSEC IAQ classification (0–500): descriptor for the tile pill, a ramp
+// color (green→red), and the guidance shown in the "Air quality note" card.
+var IAQ=[
+  {max:50, label:'Excellent', color:'oklch(0.79 0.12 158)',
+   note:'Air is clean and fresh, with VOC levels at or near a normal indoor baseline. Nothing to do but breathe easy.'},
+  {max:100, label:'Good', color:'oklch(0.81 0.11 140)',
+   note:'Air quality is solid and well within a comfortable range. No action needed.'},
+  {max:150, label:'Lightly polluted', color:'oklch(0.84 0.12 95)',
+   note:'VOCs are mildly elevated, typically from cooking, cleaning products, or normal off-gassing. A little extra ventilation clears it quickly.'},
+  {max:200, label:'Moderately polluted', color:'oklch(0.80 0.13 70)',
+   note:'VOC levels are noticeably raised. Improving airflow helps, and it’s worth noting what’s going on nearby — cooking, solvents, or new furnishings are common culprits.'},
+  {max:250, label:'Heavily polluted', color:'oklch(0.74 0.15 48)',
+   note:'VOC concentration is high enough to affect comfort. Ventilate actively and track down the source rather than waiting it out.'},
+  {max:350, label:'Severely polluted', color:'oklch(0.68 0.16 32)',
+   note:'Air quality is poor. Bring in substantial fresh air and address whatever is driving the reading.'},
+  {max:1e9, label:'Extremely polluted', color:'oklch(0.63 0.18 25)',
+   note:'VOC levels are very high. Ventilate aggressively, step out of the space if it persists, and find and remove the source.'}
+];
+function iaqLevel(v){v=v||0;for(var i=0;i<IAQ.length;i++){if(v<=IAQ[i].max)return IAQ[i];}return IAQ[IAQ.length-1];}
+function calWord(a){return ['unreliable','low','medium','high'][a]||'low';}
 function ago(s){if(s==null)return '—';if(s<90)return s+'s';if(s<5400)return Math.round(s/60)+'m';return Math.round(s/3600)+'h';}
 
 /* ---- mock fallback so the file renders standalone ---- */
@@ -124,12 +137,17 @@ function renderDash(d){
   $('pVal').textContent=fmt(d.pressure,1);
   // iaq
   $('iVal').textContent=fmt(d.iaq,0);
-  var is=iaqStat(d.iaq||0); $('iPill').innerHTML='<span class="d" style="background:'+is[1]+';box-shadow:0 0 9px '+is[1]+'"></span>'+is[0]; $('iPill').style.color=is[1];
-  var info=iaqInfo(d.iaq_acc==null?1:d.iaq_acc, d.iaq); $('iNote').textContent=info.body;
+  var lv=iaqLevel(d.iaq), acc=(d.iaq_acc==null?1:d.iaq_acc);
+  $('iPill').innerHTML='<span class="d" style="background:'+lv.color+';box-shadow:0 0 9px '+lv.color+'"></span>'+lv.label;
+  $('iPill').style.color=lv.color;
+  // accuracy 0 = "unreliable": the number is meaningless, so don't dress it up.
+  $('iNote').textContent=(acc<1)
+    ? 'The BME688 is still warming up — the IAQ number isn’t reliable yet. It keeps learning the room over the first 24–48 h.'
+    : lv.note;
   var cal=$('iCal');
-  if(info.done){ cal.className='cal done'; cal.innerHTML='<span style="color:'+ST.good+';font-weight:600;font-size:12px">✓ Calibrated</span>'; }
-  else { cal.className='cal'; var segs=''; for(var k=0;k<3;k++){segs+='<i style="background:'+(k<(d.iaq_acc||0)?ST.mod:'rgba(255,255,255,.13)')+'"></i>';}
-    cal.innerHTML='<span class="segs">'+segs+'</span><span>Calibrating · <b style="color:var(--ink)">'+info.label+'</b> ('+(d.iaq_acc||0)+'/3)</span>'; }
+  if(acc>=3){ cal.className='cal done'; cal.innerHTML='<span style="color:'+ST.good+';font-weight:600;font-size:12px">✓ Calibrated</span>'; }
+  else { cal.className='cal'; var segs=''; for(var k=0;k<3;k++){segs+='<i style="background:'+(k<acc?ST.mod:'rgba(255,255,255,.13)')+'"></i>';}
+    cal.innerHTML='<span class="segs">'+segs+'</span><span>Calibrating · <b style="color:var(--ink)">'+calWord(acc)+'</b> ('+acc+'/3)</span>'; }
 }
 function applyDeltas(){
   if(!HIST)return;
