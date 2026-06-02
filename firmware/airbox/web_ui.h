@@ -336,8 +336,8 @@ input::placeholder{color:rgba(244,239,232,.32)}
             <div class="sub off" id="nightSub">
               <div class="field"><label>During night hours</label>
                 <select id="sNMode"><option value="0">Turn screen off (blank)</option><option value="1">Dim screen (very low)</option></select></div>
-              <div class="row" style="gap:14px"><div class="field" style="flex:1;margin-top:0"><label>Starts at (0–23)</label><input type="number" min="0" max="23" id="sNStart"/></div>
-                <div class="field" style="flex:1;margin-top:0"><label>Ends at (hour)</label><input type="number" min="0" max="23" id="sNEnd"/></div></div>
+              <div class="row" style="gap:14px"><div class="field" style="flex:1;margin-top:0"><label>Starts at</label><input type="time" id="sNStart"/></div>
+                <div class="field" style="flex:1;margin-top:0"><label>Ends at</label><input type="time" id="sNEnd"/></div></div>
             </div>
           </div>
         </div>
@@ -407,9 +407,12 @@ var IAQ=[
 function iaqLevel(v){v=v||0;for(var i=0;i<IAQ.length;i++){if(v<=IAQ[i].max)return IAQ[i];}return IAQ[IAQ.length-1];}
 function calWord(a){return ['unreliable','low','medium','high'][a]||'low';}
 function ago(s){if(s==null)return '—';if(s<90)return s+'s';if(s<5400)return Math.round(s/60)+'m';return Math.round(s/3600)+'h';}
+// Night-window times are minutes-of-day on the wire; the <input type=time> uses HH:MM.
+function minToHHMM(m){m=((Math.round(m||0)%1440)+1440)%1440;var h=Math.floor(m/60),n=m%60;return (h<10?'0':'')+h+':'+(n<10?'0':'')+n;}
+function hhmmToMin(s){var p=(s||'').split(':');return ((+p[0]||0)*60)+(+p[1]||0);}
 
 /* ---- mock fallback so the file renders standalone ---- */
-var MOCK={name:'AirBox',hostname:'airbox',unit:'F',fw:'1.2.5',brightness:64,night_en:false,night_start:23,night_end:7,night_mode:0,tz:1,
+var MOCK={name:'AirBox',hostname:'airbox',unit:'F',fw:'1.2.5',brightness:64,night_en:false,night_start:1380,night_end:420,night_mode:0,tz:1,
   temp:71.4,rh:49,pressure:995.0,iaq:130,iaq_acc:3,bme_temp:72.7,bme_rh:45,eco2:1283,bvoc:2.95,
   hdc_ok:true,bme_ok:true,rssi:-62,ssid:'my-wifi',ip:'192.168.1.42',uptime:14400,heap:102400,reset_reason:'Software',hdc_age:1,bme_age:1,
   comfort:{tmin:68,tmax:76,hmin:40,hmax:60}};
@@ -541,7 +544,7 @@ function fillTz(){var s=$('sTz');s.innerHTML=TZ.map(function(t,i){return '<optio
 function loadSettings(d){
   $('sName').value=d.name||''; $('sUnit').value=d.unit||'F'; $('sHost').value=d.hostname||'';
   $('sTz').value=(d.tz!=null?d.tz:1); $('sBright').value=d.brightness!=null?d.brightness:64;
-  $('sNMode').value=(d.night_mode!=null?d.night_mode:0); $('sNStart').value=(d.night_start!=null?d.night_start:23); $('sNEnd').value=(d.night_end!=null?d.night_end:7);
+  $('sNMode').value=(d.night_mode!=null?d.night_mode:0); $('sNStart').value=minToHHMM(d.night_start!=null?d.night_start:1380); $('sNEnd').value=minToHHMM(d.night_end!=null?d.night_end:420);
   setNight(!!d.night_en);
   var c=comfortCfg(d); setUnit=d.unit||'F';
   $('cuLbl').textContent='°'+setUnit; $('cuLbl2').textContent='°'+setUnit;
@@ -554,7 +557,7 @@ function save(){
   var body='name='+encodeURIComponent($('sName').value)+'&unit='+$('sUnit').value+'&hostname='+encodeURIComponent($('sHost').value)
     +'&pass='+encodeURIComponent($('sPass').value)+'&brightness='+$('sBright').value
     +'&night_en='+($('sNight').classList.contains('on')?1:0)+'&night_mode='+$('sNMode').value
-    +'&night_start='+$('sNStart').value+'&night_end='+$('sNEnd').value+'&tz='+$('sTz').value
+    +'&night_start='+hhmmToMin($('sNStart').value)+'&night_end='+hhmmToMin($('sNEnd').value)+'&tz='+$('sTz').value
     +'&comfort_tmin='+$('sTmin').value+'&comfort_tmax='+$('sTmax').value
     +'&comfort_hmin='+$('sHmin').value+'&comfort_hmax='+$('sHmax').value
     +'&comfort_unit='+setUnit;
@@ -569,7 +572,7 @@ function poll(){
   getJSON('/api/data').catch(function(){return MOCK;}).then(function(d){
     DATA=d;
     $('conn').classList.toggle('bad',!(d.hdc_ok||d.bme_ok));
-    $('stamp').textContent='updated '+new Date().toLocaleTimeString();
+    $('stamp').textContent='updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
     $('hName').textContent=d.name||'AirBox'; document.title=d.name||'AirBox';
     $('hMeta').textContent=(d.hostname||'airbox')+'.local · v'+(d.fw||'—')+' · BME688 · HDC3022';
     renderDash(d); renderDiag(d);

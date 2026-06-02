@@ -154,8 +154,8 @@ struct Config {
   char   unit;  // 'C' or 'F'
   uint8_t brightness;   // SSD1306 contrast 0-255
   bool    nightEn;      // blank/dim the OLED on a schedule
-  uint8_t nightStart;   // local hour 0-23
-  uint8_t nightEnd;
+  uint16_t nightStartMin;  // minutes-of-day 0-1439 (local)
+  uint16_t nightEndMin;
   uint8_t nightMode;    // 0 = blank (off), 1 = dim
   uint8_t tzIndex;      // index into TZ_TABLE (DST-aware local time)
   float   comfortTminC, comfortTmaxC;   // comfort band, °C canonical
@@ -234,8 +234,10 @@ void loadConfig() {
   cfg.unit      = cfgPrefs.getString("unit", String(DEFAULT_TEMP_UNIT))[0];
   cfg.brightness = cfgPrefs.getUChar("bright", DEFAULT_BRIGHTNESS);
   cfg.nightEn    = cfgPrefs.getBool("nightEn", DEFAULT_NIGHT_ENABLE);
-  cfg.nightStart = cfgPrefs.getUChar("nStart", DEFAULT_NIGHT_START);
-  cfg.nightEnd   = cfgPrefs.getUChar("nEnd", DEFAULT_NIGHT_END);
+  // Night window is stored as minutes-of-day. Migrate from the legacy hour keys
+  // (nStart/nEnd) if the minute keys aren't present yet.
+  cfg.nightStartMin = cfgPrefs.getUShort("nsm", (uint16_t)cfgPrefs.getUChar("nStart", DEFAULT_NIGHT_START) * 60);
+  cfg.nightEndMin   = cfgPrefs.getUShort("nem", (uint16_t)cfgPrefs.getUChar("nEnd", DEFAULT_NIGHT_END) * 60);
   cfg.nightMode  = cfgPrefs.getUChar("nMode", DEFAULT_NIGHT_MODE);
   cfg.tzIndex = cfgPrefs.getUChar("tz", DEFAULT_TZ_INDEX);
   if (cfg.tzIndex >= TZ_COUNT) cfg.tzIndex = DEFAULT_TZ_INDEX;
@@ -285,8 +287,8 @@ void applyAndSaveSettings() {
   if (cfg.unit != 'C' && cfg.unit != 'F') cfg.unit = DEFAULT_TEMP_UNIT;
   if (stgBright.length()) cfg.brightness = (uint8_t)stgBright.toInt();
   if (stgNight.length())  cfg.nightEn = (stgNight.toInt() != 0);
-  if (stgNStart.length()) cfg.nightStart = (uint8_t)constrain(stgNStart.toInt(), 0, 23);
-  if (stgNEnd.length())   cfg.nightEnd = (uint8_t)constrain(stgNEnd.toInt(), 0, 23);
+  if (stgNStart.length()) cfg.nightStartMin = (uint16_t)constrain(stgNStart.toInt(), 0, 1439);
+  if (stgNEnd.length())   cfg.nightEndMin = (uint16_t)constrain(stgNEnd.toInt(), 0, 1439);
   if (stgNMode.length())  cfg.nightMode = (stgNMode.toInt() != 0) ? 1 : 0;
   if (stgTz.length()) {
     uint8_t t = (uint8_t)stgTz.toInt();
@@ -304,8 +306,8 @@ void applyAndSaveSettings() {
   cfgPrefs.putString("admin", cfg.adminPass);
   cfgPrefs.putUChar("bright", cfg.brightness);
   cfgPrefs.putBool("nightEn", cfg.nightEn);
-  cfgPrefs.putUChar("nStart", cfg.nightStart);
-  cfgPrefs.putUChar("nEnd", cfg.nightEnd);
+  cfgPrefs.putUShort("nsm", cfg.nightStartMin);
+  cfgPrefs.putUShort("nem", cfg.nightEndMin);
   cfgPrefs.putUChar("nMode", cfg.nightMode);
   cfgPrefs.putUChar("tz", cfg.tzIndex);
   cfgPrefs.putFloat("ctmin", cfg.comfortTminC);
@@ -575,13 +577,13 @@ void setDisplayPower(bool on) {
 }
 static bool timeSynced() { return time(nullptr) > 1700000000; }  // ~Nov 2023+
 bool isNightNow() {
-  if (!cfg.nightEn || cfg.nightStart == cfg.nightEnd || !timeSynced()) return false;
+  if (!cfg.nightEn || cfg.nightStartMin == cfg.nightEndMin || !timeSynced()) return false;
   time_t now = time(nullptr);
   struct tm t;
   localtime_r(&now, &t);
-  int h = t.tm_hour;
-  if (cfg.nightStart < cfg.nightEnd) return (h >= cfg.nightStart && h < cfg.nightEnd);
-  return (h >= cfg.nightStart || h < cfg.nightEnd);  // window wraps midnight
+  int m = t.tm_hour * 60 + t.tm_min;
+  if (cfg.nightStartMin < cfg.nightEndMin) return (m >= cfg.nightStartMin && m < cfg.nightEndMin);
+  return (m >= cfg.nightStartMin || m < cfg.nightEndMin);  // window wraps midnight
 }
 
 // Draw a QR code (text encoded) as filled rects using the ESP32 core's
@@ -768,8 +770,8 @@ void buildDataJson(JsonDocument& doc) {
   doc["fw"] = FW_VERSION;
   doc["brightness"] = cfg.brightness;
   doc["night_en"] = cfg.nightEn;
-  doc["night_start"] = cfg.nightStart;
-  doc["night_end"] = cfg.nightEnd;
+  doc["night_start"] = cfg.nightStartMin;  // minutes-of-day
+  doc["night_end"] = cfg.nightEndMin;
   doc["night_mode"] = cfg.nightMode;
   doc["tz"] = cfg.tzIndex;
   JsonObject cm = doc["comfort"].to<JsonObject>();
