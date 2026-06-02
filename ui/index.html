@@ -255,8 +255,8 @@ input::placeholder{color:rgba(244,239,232,.32)}
             <div class="sub off" id="nightSub">
               <div class="field"><label>During night hours</label>
                 <select id="sNMode"><option value="0">Turn screen off (blank)</option><option value="1">Dim screen (very low)</option></select></div>
-              <div class="row" style="gap:14px"><div class="field" style="flex:1;margin-top:0"><label>Starts at (0–23)</label><input type="number" min="0" max="23" id="sNStart"/></div>
-                <div class="field" style="flex:1;margin-top:0"><label>Ends at (hour)</label><input type="number" min="0" max="23" id="sNEnd"/></div></div>
+              <div class="row" style="gap:14px"><div class="field" style="flex:1;margin-top:0"><label>Starts at</label><input type="time" id="sNStart"/></div>
+                <div class="field" style="flex:1;margin-top:0"><label>Ends at</label><input type="time" id="sNEnd"/></div></div>
             </div>
           </div>
         </div>
