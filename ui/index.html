@@ -138,11 +138,13 @@ input::placeholder{color:rgba(244,239,232,.32)}
   .tabs{order:3;width:100%}.tabs button{flex:1}
   .meta{text-align:left}
 }
-/* phones: stack the night-mode start/end time pickers — native iOS <input
-   type=time> has a hard minimum width, so two side-by-side clip a narrow screen.
-   The row's gap:14px becomes the vertical spacing once it's a column. */
+/* phones: stack the night-mode start/end time pickers. Keep the row's natural
+   direction and let flex-wrap push each field onto its own full-width line — a
+   flex *column* makes iOS size the width to the native <input type=time>'s
+   intrinsic width and overflow the card. flex-basis:100% wraps; the row's
+   gap:14px spaces the two lines; min-width:0 (above) lets them fit the card. */
 @media(max-width:560px){
-  #nightSub .row{flex-direction:column;align-items:stretch}
+  #nightSub .row .field{flex-basis:100%}
 }
 </style>
 </head>
