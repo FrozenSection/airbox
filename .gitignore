@@ -14,6 +14,7 @@ firmware/**/local_config.h
 # IDE / editor
 .vscode/
 .idea/
+.claude/
 *.swp
 
 # macOS
