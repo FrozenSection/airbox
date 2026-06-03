@@ -831,9 +831,18 @@ void buildHistoryJson(JsonDocument& doc) {
 
 void registerRunRoutes() {
   server.on("/", HTTP_GET, [](AsyncWebServerRequest* req) {
-    // On ESP32 flash is memory-mapped, so the const-char* send() overload reads
-    // the PROGMEM page directly. Transient ~16 KB String copy; fine on S3 heap.
-    req->send(200, "text/html", INDEX_HTML);
+    // Serve the dashboard gzip-compressed and zero-copy: the (uint8_t*, len)
+    // overload maps to AsyncProgmemResponse, which streams straight from flash
+    // in ~1.4 KB TCP segments (memcpy_P) with no heap String. The old
+    // const-char* overload copied the whole ~35 KB page into a contiguous heap
+    // String per request — which stalled out on a fragmented heap / weak link.
+    // Gzip (~35 KB -> ~9 KB) also means far fewer segments to lose on a marginal
+    // WiFi link. Cache-Control lets the browser skip the re-fetch on refresh.
+    AsyncWebServerResponse* res =
+      req->beginResponse(200, "text/html", INDEX_HTML_GZ, INDEX_HTML_GZ_LEN);
+    res->addHeader("Content-Encoding", "gzip");
+    res->addHeader("Cache-Control", "max-age=86400");
+    req->send(res);
   });
   server.on("/api/data", HTTP_GET, [](AsyncWebServerRequest* req) {
     JsonDocument doc;
@@ -1156,6 +1165,10 @@ bool connectSTA() {
     display.display();
   }
   WiFi.mode(WIFI_STA);
+  // Disable WiFi modem power-save. The default (WIFI_PS_MIN_MODEM) sleeps the
+  // radio between DTIM beacons, which adds latency and hurts TCP retransmit
+  // recovery — painful for an always-on web server, especially on a weak link.
+  WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
   WiFi.persistent(false);
   WiFi.begin(cfg.ssid.c_str(), cfg.pass.c_str());
