@@ -206,19 +206,39 @@ function save(){
 }
 function post(path,confirmMsg){ if(confirmMsg&&!confirm(confirmMsg))return; fetch(path,{method:'POST'}).catch(function(){}); }
 
-/* ---- poll ---- */
-function poll(){
-  getJSON('/api/data').catch(function(){return MOCK;}).then(function(d){
-    DATA=d;
-    $('conn').classList.toggle('bad',!(d.hdc_ok||d.bme_ok));
-    $('stamp').textContent='updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
-    $('hName').textContent=d.name||'AirBox'; document.title=d.name||'AirBox';
-    $('hMeta').textContent=(d.hostname||'airbox')+'.local · v'+(d.fw||'—')+' · BME688 · HDC3022';
-    renderDash(d); renderDiag(d);
-    if(!settingsDirty) loadSettings(d);
-  });
+/* ---- poll ----
+   MOCK / MH are ONLY for previewing this file standalone in a browser (file://).
+   On the deployed device we never substitute fake data: if a fetch fails we keep
+   the last real values on screen but mark them unmistakably stale, so an API
+   problem can't masquerade as fresh, plausible-looking readings. */
+var PREVIEW=(location.protocol==='file:'), lastOk=0;
+function timeStr(t){return new Date(t).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});}
+function render(d){
+  DATA=d;
+  $('hName').textContent=d.name||'AirBox'; document.title=d.name||'AirBox';
+  $('hMeta').textContent=(d.hostname||'airbox')+'.local · v'+(d.fw||'—')+' · BME688 · HDC3022';
+  renderDash(d); renderDiag(d);
+  if(!settingsDirty) loadSettings(d);
 }
-function loadHist(){ getJSON('/api/history').catch(function(){return MH;}).then(function(h){HIST=h;redraw();applyDeltas();}); }
+function markStale(){
+  $('conn').classList.add('bad');
+  $('stamp').textContent=lastOk?('⚠ no response · last '+timeStr(lastOk)):'⚠ no response from device';
+}
+function poll(){
+  if(PREVIEW){ render(MOCK); $('stamp').textContent='preview (mock data)'; return; }
+  getJSON('/api/data').then(function(d){
+    lastOk=Date.now();
+    $('conn').classList.toggle('bad',!(d.hdc_ok||d.bme_ok));
+    $('stamp').textContent='updated '+timeStr(lastOk);
+    render(d);
+  }).catch(markStale);
+}
+function loadHist(){
+  if(PREVIEW){ HIST=MH; redraw(); applyDeltas(); return; }
+  getJSON('/api/history').then(function(h){HIST=h;redraw();applyDeltas();}).catch(function(){/* keep last chart */});
+}
+// Catch a silent stall between polls: no successful /api/data in >12 s -> stale.
+function staleCheck(){ if(!PREVIEW && lastOk && Date.now()-lastOk>12000) markStale(); }
 
 /* ---- tabs ---- */
 var settingsDirty=false;
@@ -248,6 +268,12 @@ $('recfgBtn').onclick=function(){post('/api/reconfigure','Reboot into WiFi setup
 $('restartBtn').onclick=function(){post('/api/restart','Restart the device now?');};
 window.addEventListener('resize',redraw);
 
+// Refresh both immediately when the tab regains focus (covers the 5-min history
+// gap and a phone waking from sleep) so you never stare at stale charts.
+document.addEventListener('visibilitychange',function(){ if(!document.hidden){ poll(); loadHist(); } });
+
 poll(); loadHist();
-setInterval(poll,4000); setInterval(loadHist,60000);
+// History only changes every 5 min on the device, so polling it every minute was
+// 5x wasted ~10 KB fetches; align to the sample cadence. /api/data stays at 4 s.
+setInterval(poll,4000); setInterval(loadHist,300000); setInterval(staleCheck,3000);
 })();
