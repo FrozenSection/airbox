@@ -123,6 +123,9 @@ input::placeholder{color:rgba(244,239,232,.32)}
 .btn.amber{border-color:color-mix(in oklch,var(--mod) 45%,transparent);background:color-mix(in oklch,var(--mod) 12%,transparent);color:var(--mod)}
 .btn.danger{border-color:color-mix(in oklch,var(--poor) 45%,transparent);background:color-mix(in oklch,var(--poor) 12%,transparent);color:var(--poor)}
 .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+/* let flex fields (e.g. the side-by-side night time pickers) shrink instead of
+   overflowing — native <input type=time> has a wide intrinsic min-width on iOS */
+.row .field{min-width:0}
 .btns{display:flex;flex-wrap:wrap;gap:10px}
 .msg{font-size:13.5px;font-weight:500;color:var(--good)}
 
@@ -255,7 +258,7 @@ input::placeholder{color:rgba(244,239,232,.32)}
             <div class="sub off" id="nightSub">
               <div class="field"><label>During night hours</label>
                 <select id="sNMode"><option value="0">Turn screen off (blank)</option><option value="1">Dim screen (very low)</option></select></div>
-              <div class="row" style="gap:14px"><div class="field" style="flex:1;margin-top:0"><label>Starts at</label><input type="time" id="sNStart"/></div>
+              <div class="row" style="gap:14px;margin-top:16px"><div class="field" style="flex:1;margin-top:0"><label>Starts at</label><input type="time" id="sNStart"/></div>
                 <div class="field" style="flex:1;margin-top:0"><label>Ends at</label><input type="time" id="sNEnd"/></div></div>
             </div>
           </div>
