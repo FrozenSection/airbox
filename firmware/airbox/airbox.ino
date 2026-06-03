@@ -32,6 +32,7 @@
 #include <esp_mac.h>
 #include <esp_task_wdt.h>
 #include <esp_system.h>  // esp_reset_reason()
+#include <esp_heap_caps.h>  // heap_caps_get_largest_free_block() — fragmentation diag
 #include <time.h>
 #include <LittleFS.h>    // persistent trend history
 #include "qrcode.h"  // QR encoder bundled in the ESP32 core (espressif__qrcode)
@@ -799,6 +800,18 @@ void buildDataJson(JsonDocument& doc) {
   doc["ip"] = WiFi.localIP().toString();
   doc["uptime"] = millis() / 1000;
   doc["heap"] = ESP.getFreeHeap();
+  // Heap health for the curl runbook (the small endpoint that stays reachable
+  // when big pages stall). heap_min is the low-water mark since boot (catches a
+  // slow leak); heap_largest is the biggest *contiguous* block — what a large
+  // response actually needs, so it reveals fragmentation that "heap" alone hides.
+  doc["heap_min"] = ESP.getMinFreeHeap();
+  // Largest contiguous *internal* block — MALLOC_CAP_8BIT alone would report the
+  // 2 MB PSRAM pool and hide internal-RAM fragmentation (the heap AsyncTCP pbufs
+  // and small allocs live in). PSRAM is reported separately: big allocations land
+  // there on this n4r2 board, which is why internal heap stayed flat in the
+  // v1.3.6 stall — that was RF + payload size, not fragmentation.
+  doc["heap_largest"] = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+  doc["psram_free"] = ESP.getFreePsram();
   doc["reset_reason"] = resetReasonName();
   if (s.hdcLastGoodMs > 0) doc["hdc_age"] = (millis() - s.hdcLastGoodMs) / 1000;
   if (s.bmeLastGoodMs > 0) doc["bme_age"] = (millis() - s.bmeLastGoodMs) / 1000;
@@ -827,6 +840,30 @@ void buildHistoryJson(JsonDocument& doc) {
     ap.add(histP[idx]);
     ai.add(histIAQ[idx]);
   }
+}
+
+// One history sample -> CSV row in `out` (size >= 64); returns the byte length.
+// Empty fields for NaN gaps and pre-clock-sync (ts==0) timestamps. Reads only the
+// ring buffer, so it's safe to call from the async web task (no flash/I2C/blocking).
+static int histCsvRow(int idx, char* out, size_t sz) {
+  int n = 0;
+  uint32_t ts = histTime[idx];
+  if (ts > 0) {
+    time_t t = (time_t)ts;
+    struct tm tmv;
+    localtime_r(&t, &tmv);
+    n += strftime(out + n, sz - n, "%Y-%m-%d %H:%M:%S", &tmv);
+  }
+  out[n++] = ',';
+  if (!isnan(histT[idx]))   n += snprintf(out + n, sz - n, "%.2f", toUnit(histT[idx]));
+  out[n++] = ',';
+  if (!isnan(histRH[idx]))  n += snprintf(out + n, sz - n, "%.1f", histRH[idx]);
+  out[n++] = ',';
+  if (!isnan(histP[idx]))   n += snprintf(out + n, sz - n, "%.1f", histP[idx]);
+  out[n++] = ',';
+  if (!isnan(histIAQ[idx])) n += snprintf(out + n, sz - n, "%.0f", histIAQ[idx]);
+  out[n++] = '\n';
+  return n;
 }
 
 void registerRunRoutes() {
@@ -862,30 +899,34 @@ void registerRunRoutes() {
   // time (per the timezone setting). NaN gaps and pre-clock-sync samples come
   // through as empty fields.
   server.on("/api/history.csv", HTTP_GET, [](AsyncWebServerRequest* req) {
-    AsyncResponseStream* res = req->beginResponseStream("text/csv");
+    // Chunked, NOT buffered. AsyncResponseStream would grow ONE contiguous heap
+    // buffer to hold the whole ~80 KB CSV before sending a byte — the same
+    // large-contiguous-allocation failure mode as the old dashboard String copy.
+    // beginChunkedResponse asks this filler for ~1.4 KB at a time, so peak RAM is
+    // a single TCP segment regardless of how many samples are stored. The filler
+    // runs in the async task and only reads the ring buffer (snapshotted below so
+    // a mid-export sample write can't shift the indices), emitting whole rows only
+    // so a row is never split across chunks.
+    AsyncWebServerResponse* res = req->beginChunkedResponse("text/csv",
+      [head = histHead, count = histCount, unit = cfg.unit, headerDone = false, row = 0]
+      (uint8_t* buf, size_t maxLen, size_t) mutable -> size_t {
+        size_t pos = 0;
+        char line[64];
+        if (!headerDone) {
+          int n = snprintf(line, sizeof(line),
+                           "timestamp,temp_%c,humidity_pct,pressure_hpa,iaq\n", unit);
+          if ((size_t)n > maxLen) return 0;  // can't happen (MSS >> header)
+          memcpy(buf, line, n); pos += n; headerDone = true;
+        }
+        while (row < count) {
+          int idx = (head - count + row + HISTORY_SAMPLES * 2) % HISTORY_SAMPLES;
+          int n = histCsvRow(idx, line, sizeof(line));
+          if (pos + (size_t)n > maxLen) break;  // won't fit; resume next call
+          memcpy(buf + pos, line, n); pos += n; row++;
+        }
+        return pos;  // 0 only once header + all rows are out -> ends the response
+      });
     res->addHeader("Content-Disposition", "attachment; filename=airbox-history-7d.csv");
-    res->printf("timestamp,temp_%c,humidity_pct,pressure_hpa,iaq\n", cfg.unit);
-    char tbuf[24];
-    for (int k = 0; k < histCount; k++) {
-      int idx = (histHead - histCount + k + HISTORY_SAMPLES * 2) % HISTORY_SAMPLES;
-      uint32_t ts = histTime[idx];
-      if (ts > 0) {
-        time_t t = (time_t)ts;
-        struct tm tmv;
-        localtime_r(&t, &tmv);
-        strftime(tbuf, sizeof(tbuf), "%Y-%m-%d %H:%M:%S", &tmv);
-        res->print(tbuf);
-      }
-      res->print(',');
-      if (!isnan(histT[idx]))   res->print(toUnit(histT[idx]), 2);
-      res->print(',');
-      if (!isnan(histRH[idx]))  res->print(histRH[idx], 1);
-      res->print(',');
-      if (!isnan(histP[idx]))   res->print(histP[idx], 1);
-      res->print(',');
-      if (!isnan(histIAQ[idx])) res->print(histIAQ[idx], 0);
-      res->print('\n');
-    }
     req->send(res);
   });
   server.on("/api/settings", HTTP_POST, [](AsyncWebServerRequest* req) {
