@@ -138,13 +138,17 @@ input::placeholder{color:rgba(244,239,232,.32)}
   .tabs{order:3;width:100%}.tabs button{flex:1}
   .meta{text-align:left}
 }
-/* phones: stack the night-mode start/end time pickers. Keep the row's natural
-   direction and let flex-wrap push each field onto its own full-width line — a
-   flex *column* makes iOS size the width to the native <input type=time>'s
-   intrinsic width and overflow the card. flex-basis:100% wraps; the row's
-   gap:14px spaces the two lines; min-width:0 (above) lets them fit the card. */
+/* Night start/end pickers. The flex:1 lives here (not inline on the fields) so
+   the mobile rule below can actually win — an inline flex:1 sets flex-basis:0 and
+   silently overrode every previous stacking attempt. Wide screens: side by side. */
+#nightSub .row .field{flex:1;margin-top:0}
+/* Phones: native iOS <input type=time> won't shrink below its intrinsic width, so
+   two side-by-side overflow a narrow card. Make the row a plain block and let each
+   picker take the full width — same size as the "During night hours" dropdown. */
 @media(max-width:560px){
-  #nightSub .row .field{flex-basis:100%}
+  #nightSub .row{display:block}
+  #nightSub .row .field{margin-top:14px}
+  #nightSub .row .field:first-child{margin-top:0}
 }
 </style>
 </head>
@@ -266,8 +270,8 @@ input::placeholder{color:rgba(244,239,232,.32)}
             <div class="sub off" id="nightSub">
               <div class="field"><label>During night hours</label>
                 <select id="sNMode"><option value="0">Turn screen off (blank)</option><option value="1">Dim screen (very low)</option></select></div>
-              <div class="row" style="gap:14px;margin-top:16px"><div class="field" style="flex:1;margin-top:0"><label>Starts at</label><input type="time" id="sNStart"/></div>
-                <div class="field" style="flex:1;margin-top:0"><label>Ends at</label><input type="time" id="sNEnd"/></div></div>
+              <div class="row" style="gap:14px;margin-top:16px"><div class="field"><label>Starts at</label><input type="time" id="sNStart"/></div>
+                <div class="field"><label>Ends at</label><input type="time" id="sNEnd"/></div></div>
             </div>
           </div>
         </div>
