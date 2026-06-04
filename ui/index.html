@@ -107,6 +107,12 @@ input,select{width:100%;padding:12px 14px;border-radius:11px;background:var(--ca
 select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23bbb' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M2 4l4 4 4-4'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;cursor:pointer}
 input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in oklch,var(--accent) 28%,transparent)}
 input::placeholder{color:rgba(244,239,232,.32)}
+/* iOS renders native <input type=time> at an intrinsic width that ignores
+   width:100% and overflows the card (the <select> avoids this via appearance:none).
+   Strip the native chrome so the time inputs size to their container like every
+   other field; keep the value centered to match the previous look. */
+input[type=time]{-webkit-appearance:none;appearance:none;min-width:0;max-width:100%;text-align:center}
+input[type=time]::-webkit-date-and-time-value{text-align:center}
 .minmax{display:flex;align-items:center;gap:10px}
 .minmax span{color:var(--dim);font-size:13.5px;white-space:nowrap}
 .switch{width:46px;height:27px;border-radius:14px;border:0;cursor:pointer;padding:0;position:relative;
