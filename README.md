@@ -12,7 +12,7 @@ no cloud, no app, no Home Assistant required.
 
 - **Measures:** temperature & humidity (HDC3022, lab-grade), barometric
   pressure and air quality / IAQ (BME688 via Bosch BSEC2).
-- **Local dashboard:** live readings + 24 h trend charts at
+- **Local dashboard:** live readings + 8 h trend charts at
   `http://airbox.local`, served straight from the device. Works on a network
   with no internet access.
 - **Easy WiFi setup:** on first boot it creates a setup hotspot; scan the QR
