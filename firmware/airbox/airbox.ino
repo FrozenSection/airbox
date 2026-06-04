@@ -812,6 +812,9 @@ void buildDataJson(JsonDocument& doc) {
   // v1.3.6 stall — that was RF + payload size, not fragmentation.
   doc["heap_largest"] = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
   doc["psram_free"] = ESP.getFreePsram();
+  // ESP32-S3 internal die temperature (°C). Coarse, but lets the curl runbook
+  // watch for thermal trouble — the "module too hot to touch" symptom in v1.3.12.
+  doc["chip_temp"] = temperatureRead();
   doc["reset_reason"] = resetReasonName();
   if (s.hdcLastGoodMs > 0) doc["hdc_age"] = (millis() - s.hdcLastGoodMs) / 1000;
   if (s.bmeLastGoodMs > 0) doc["bme_age"] = (millis() - s.bmeLastGoodMs) / 1000;
@@ -1206,10 +1209,13 @@ bool connectSTA() {
     display.display();
   }
   WiFi.mode(WIFI_STA);
-  // Disable WiFi modem power-save. The default (WIFI_PS_MIN_MODEM) sleeps the
-  // radio between DTIM beacons, which adds latency and hurts TCP retransmit
-  // recovery — painful for an always-on web server, especially on a weak link.
-  WiFi.setSleep(false);
+  // Keep WiFi modem power-save ON (default WIFI_PS_MIN_MODEM): the radio dozes
+  // between DTIM beacons, cutting steady-state radio power and heat a lot. v1.3.7
+  // disabled it to fight web lag, but that lag was really the 35 KB page (now
+  // 12 KB gzipped) + buffered CSV (now chunked) — and leaving the radio at full
+  // power continuously cooked the S3 module on a weak link (constant max-TX
+  // retransmits). The small added latency is fine for this dashboard.
+  WiFi.setSleep(true);
   WiFi.setAutoReconnect(true);
   WiFi.persistent(false);
   WiFi.begin(cfg.ssid.c_str(), cfg.pass.c_str());
@@ -1508,4 +1514,10 @@ void loop() {
       saveBsecState();
     }
   }
+
+  // Yield the CPU briefly so the loop core can idle (WFI) between ticks instead
+  // of spinning at 100%. Big steady-state heat/power cut on an always-on board;
+  // the async web server runs in its own task and is unaffected, and BSEC LP
+  // (3 s cadence) and the WDT (60 s) are nowhere near starved at ~100 loops/s.
+  delay(10);
 }
