@@ -14,7 +14,7 @@ accent tint shifts with it. It's an interpretation layered on top of the numbers
 the raw readings are always shown below.
 
 ### The four readings
-Each with a 24-hour trend chart:
+Each with an 8-hour trend chart:
 
 | Reading | Source | Notes |
 |---|---|---|
@@ -26,9 +26,10 @@ Each with a 24-hour trend chart:
 The **Temperature** and **Humidity** tiles also show a **range bar** marking where
 the current value sits within your ideal band (`ideal X–Y`).
 
-Charts show the most recent **~24 hours** (a sample every 5 minutes) with a
-time axis (`-Xh … now`). History is saved to flash, so it **survives a reboot**
-and keeps up to **7 days** for CSV export (Diagnostics tab).
+Charts show the most recent **~8 hours** (a sample every 5 minutes) with a time
+axis (`-Xh … now`) and **min/max scale labels** so you can read the actual range
+at a glance. History is saved to flash, so it **survives a reboot** and keeps up
+to **7 days** for CSV export (Diagnostics tab).
 
 ## Diagnostics tab
 

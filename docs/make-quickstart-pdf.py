@@ -93,7 +93,7 @@ S += [step(1, "Power it on.", "Plug in USB-C. The screen shows <b>WiFi Setup</b>
 
 S += [Paragraph("Reading the dashboard", hdr),
       Paragraph("Four live tiles - <b>Temperature, Humidity, Pressure, Air "
-                "Quality (IAQ)</b> - each with a 24-hour trend. IAQ is a 0 to 500 "
+                "Quality (IAQ)</b> - each with an 8-hour trend. IAQ is a 0 to 500 "
                 "index (lower = cleaner) and needs <b>24-48 h</b> to self-calibrate. "
                 "The <b>Diagnostics</b> tab has sensor health, network info, and a "
                 "<b>Download CSV</b> button (last 7 days). The <b>Settings</b> tab "
