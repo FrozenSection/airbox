@@ -201,7 +201,6 @@ function loadSettings(d){
   var c=comfortCfg(d); setUnit=d.unit||'F';
   $('cuLbl').textContent='°'+setUnit; $('cuLbl2').textContent='°'+setUnit;
   $('sTmin').value=c.tmin; $('sTmax').value=c.tmax; $('sHmin').value=c.hmin; $('sHmax').value=c.hmax;
-  $('aFw').textContent='v'+(d.fw||'—');
 }
 function setNight(on){ $('sNight').classList.toggle('on',on); $('nightSub').classList.toggle('off',!on); }
 function save(){
