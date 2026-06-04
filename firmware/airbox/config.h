@@ -12,7 +12,7 @@
 // ----- Firmware identity -----
 // Bump on every change we flash, so the OLED header / dashboard confirm which
 // build is actually running (handy for verifying an OTA took).
-#define FW_VERSION        "1.3.13"
+#define FW_VERSION        "1.3.14"
 #define DEVICE_MODEL      "QT Py ESP32-S3 + BME688 + HDC3022 (standalone)"
 
 // ----- Feature flags -----
@@ -73,10 +73,10 @@
 // so it survives a reboot, with a UTC timestamp per sample. Requires a partition
 // scheme WITH a filesystem AND OTA — "Minimal SPIFFS (1.9MB APP with OTA/128KB
 // SPIFFS)" (see firmware/README). The dashboard chart shows the most recent
-// CHART_SAMPLES (24 h); the CSV export covers the whole 7 days.
+// CHART_SAMPLES (8 h); the CSV export covers the whole 7 days.
 #define HISTORY_SAMPLES          2016        // 7 days @ 5 min
 #define HISTORY_INTERVAL_MS      300000UL    // 5 minutes
-#define CHART_SAMPLES            288         // dashboard chart window: last 24 h
+#define CHART_SAMPLES            96          // dashboard chart window: last 8 h
 #define HISTORY_SAVE_INTERVAL_MS 1800000UL   // flush history to flash every 30 min
 #define HISTORY_FILE             "/hist.bin"
 

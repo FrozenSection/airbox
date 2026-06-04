@@ -66,7 +66,7 @@ function getJSON(url){return fetch(url,{cache:'no-store'}).then(function(r){if(!
 var DATA=null, HIST=null;
 
 /* ---- canvas chart (ambient sparkline: area + rounded line + end dot) ---- */
-function chart(id,arr,color,minSpan){
+function chart(id,arr,color,minSpan,dec,suf){
   var c=$(id); if(!c)return; var w=c.clientWidth,h=c.clientHeight;
   if(!w||!h)return; var dpr=window.devicePixelRatio||1; c.width=w*dpr; c.height=h*dpr;
   var x=c.getContext('2d'); x.scale(dpr,dpr); x.clearRect(0,0,w,h);
@@ -88,17 +88,27 @@ function chart(id,arr,color,minSpan){
     if(!started){x.moveTo(qx,qy);started=true;}else x.lineTo(qx,qy); lx=qx;ly=qy;}
   x.stroke();
   x.fillStyle=color;x.beginPath();x.arc(lx,ly,3,0,6.2832);x.fill();
+  // y-axis scale: the window's actual min/max, so a flat-looking line is still
+  // readable — you can see whether it moved 0.3° or 6°. Drawn dim, with a thin
+  // dark halo so the numbers stay legible over the line/area.
+  if(dec!=null){suf=suf||'';
+    x.font='600 10px system-ui';x.textAlign='left';x.textBaseline='alphabetic';
+    x.lineWidth=2.5;x.strokeStyle='rgba(10,10,12,.55)';x.fillStyle='rgba(244,239,232,.62)';
+    var sMax=dmx.toFixed(dec)+suf,sMin=dmn.toFixed(dec)+suf;
+    x.strokeText(sMax,3,11);x.fillText(sMax,3,11);
+    x.strokeText(sMin,3,h-4);x.fillText(sMin,3,h-4);
+  }
 }
 // Left axis label = the actual span of data present, so it reads e.g. -15m
-// early on and grows to -24h once the 24 h chart window is full.
+// early on and grows to -8h once the 8 h chart window is full.
 function spanLabel(){
-  if(!HIST||!HIST.t||HIST.t.length<2) return '−24h';
+  if(!HIST||!HIST.t||HIST.t.length<2) return '−8h';
   var sp=(HIST.t.length-1)*(HIST.interval_s||300);
   if(sp<5400) return '−'+Math.round(sp/60)+'m';
   var hr=sp/3600; return '−'+(hr<10?hr.toFixed(1):Math.round(hr))+'h';
 }
 function redraw(){ if(!HIST)return;
-  chart('cT',HIST.t,SIG.t,0.7); chart('cH',HIST.rh,SIG.h,2); chart('cP',HIST.p,SIG.p,1.5); chart('cI',HIST.iaq,SIG.i,8);
+  chart('cT',HIST.t,SIG.t,0.7,1,'°'); chart('cH',HIST.rh,SIG.h,2,0,'%'); chart('cP',HIST.p,SIG.p,1.5,0,''); chart('cI',HIST.iaq,SIG.i,8,0,'');
   var lbl=spanLabel(), ax=document.querySelectorAll('.axL');
   for(var k=0;k<ax.length;k++) ax[k].textContent=lbl;
 }
@@ -157,8 +167,9 @@ function applyDeltas(){
   function first(a){for(var i=0;i<a.length;i++)if(a[i]!=null&&!isNaN(a[i]))return a[i];return null;}
   function last(a){for(var i=a.length-1;i>=0;i--)if(a[i]!=null&&!isNaN(a[i]))return a[i];return null;}
   function dlt(a,dec,suf){var f=first(a),l=last(a);if(f==null||l==null)return '';var x=l-f;return (x>=0?'+':'−')+Math.abs(x).toFixed(dec)+(suf||'');}
-  $('tDelta').textContent=dlt(HIST.t,1,'°')+' · 24h';
-  $('hDelta').textContent=dlt(HIST.rh,0,'%')+' · 24h';
+  var win=spanLabel().slice(1);  // window span without the leading "−", e.g. "8h"
+  $('tDelta').textContent=dlt(HIST.t,1,'°')+' · '+win;
+  $('hDelta').textContent=dlt(HIST.rh,0,'%')+' · '+win;
 }
 
 /* ---- diagnostics ---- */
