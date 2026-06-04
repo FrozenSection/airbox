@@ -87,6 +87,10 @@ canvas{display:block;width:100%;height:126px}
 
 /* diagnostics + settings */
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+/* Save/Discard span the full grid width and sit last — so they're at the bottom
+   of the settings on desktop AND mobile (not stranded mid-page when the two
+   columns stack into one). */
+.actions{grid-column:1 / -1}
 .panel{display:flex;flex-direction:column;gap:0}
 .panel h3{margin:0 0 4px}
 .drow{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 0;border-bottom:1px solid var(--line)}
@@ -263,8 +267,6 @@ input[type=time]::-webkit-date-and-time-value{text-align:center}
           <div class="field"><label>Admin password <span class="hint">— blank = keep current</span></label>
             <input type="password" id="sPass" placeholder="OTA + Settings auth" autocomplete="off"/></div>
         </div>
-        <div class="row"><button class="btn primary" id="saveBtn">Save settings</button>
-          <button class="btn" id="discardBtn">Discard changes</button><span class="msg" id="sMsg"></span></div>
       </div>
       <div style="display:flex;flex-direction:column;gap:18px">
         <div class="card panel"><h3 class="uc">Display</h3>
@@ -294,6 +296,8 @@ input[type=time]::-webkit-date-and-time-value{text-align:center}
           <div class="field" style="gap:3px"><span style="color:var(--faint);font-size:12px">Firmware</span><span style="font-weight:500;font-size:14px" id="aFw">v—</span></div>
         </div>
       </div>
+      <div class="row actions"><button class="btn primary" id="saveBtn">Save settings</button>
+        <button class="btn" id="discardBtn">Discard changes</button><span class="msg" id="sMsg"></span></div>
     </div>
   </section>
 
