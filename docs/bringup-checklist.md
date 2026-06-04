@@ -80,7 +80,6 @@ arduino-cli monitor -p /dev/cu.usbmodemXXXX -c baudrate=115200   # watch boot lo
 - [ ] **Settings** tab:
   - [ ] Set a **device name**; confirm it shows in the header, OLED, and tab title.
   - [ ] Toggle **°F/°C**; confirm readings + charts switch and it survives a reboot.
-  - [ ] **Change the admin password** from the default `airbox`.
 
 ## 6. OLED longevity settings
 
@@ -111,9 +110,9 @@ arduino-cli monitor -p /dev/cu.usbmodemXXXX -c baudrate=115200   # watch boot lo
 - [ ] Bump `FW_VERSION` in `config.h` (e.g. `1.0.1`), recompile to a `.bin`:
       `arduino-cli compile --fqbn $FQBN --output-dir build firmware/airbox`
       (the `.bin` lands in `build/`).
-- [ ] Go to `http://airbox.local/update`, log in (`admin` / your password),
-      upload the `.bin`. Device reboots; confirm the new version on the
-      Diagnostics tab. Confirm it did **not** reset/hang mid-flash.
+- [ ] Go to `http://airbox.local/update` (no login) and upload the `.bin`.
+      Device reboots; confirm the new version on the Diagnostics tab. Confirm it
+      did **not** reset/hang mid-flash.
 
 ## 9. Burn-in & calibration
 
@@ -127,7 +126,6 @@ arduino-cli monitor -p /dev/cu.usbmodemXXXX -c baudrate=115200   # watch boot lo
 
 - [ ] Factory-reset WiFi (BOOT hold) so it boots into the **portal** for your
       friend — but leave the BSEC calibration intact so he gets a head start.
-- [ ] Decide the **admin password** to hand him (or have him set his own).
 - [ ] Print/share: the setup steps in [`first-time-setup.md`](first-time-setup.md)
       and the dashboard guide in [`dashboard.md`](dashboard.md).
 - [ ] Push the repo public and send him the link.

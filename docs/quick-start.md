@@ -42,12 +42,11 @@ with an 8-hour trend chart.
 - **Diagnostics** tab: sensor health, network info, system stats, and a
   **Download CSV** button (last 7 days of data).
 - **Settings** tab: device name, °F/°C, time zone, screen brightness & night
-  mode, and the admin password.
+  mode.
 
 ## Good to know
-- **Admin password** (for Settings changes & firmware updates) defaults to
-  **`airbox`** — change it under Settings → Security.
-- **Firmware updates** happen in the browser at **`http://airbox.local/update`**.
+- **Firmware updates** happen in the browser at **`http://airbox.local/update`**
+  (no password needed — it's a local-network device).
 - The screen dims/sleeps on a schedule if you enable **Night Mode**; the
   dashboard always works even when the screen is off.
 

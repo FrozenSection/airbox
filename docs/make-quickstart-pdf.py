@@ -97,14 +97,11 @@ S += [Paragraph("Reading the dashboard", hdr),
                 "index (lower = cleaner) and needs <b>24-48 h</b> to self-calibrate. "
                 "The <b>Diagnostics</b> tab has sensor health, network info, and a "
                 "<b>Download CSV</b> button (last 7 days). The <b>Settings</b> tab "
-                "covers name, units, time zone, screen brightness / night mode, and "
-                "the admin password.", body)]
+                "covers name, units, time zone, screen brightness / night mode.", body)]
 
 S += [Paragraph("Good to know", hdr),
-      bullet("The admin password (Settings changes &amp; firmware updates) "
-             "defaults to <b>airbox</b> - change it under Settings."),
       bullet("Firmware updates happen in the browser at "
-             "<b>http://airbox.local/update</b>."),
+             "<b>http://airbox.local/update</b> (no password needed)."),
       bullet("Enable <b>Night Mode</b> to blank or dim the screen on a schedule; "
              "the dashboard still works while the screen is off.")]
 

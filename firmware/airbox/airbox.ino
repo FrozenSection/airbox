@@ -151,7 +151,6 @@ struct Config {
   String pass;
   String devName;
   String hostname;
-  String adminPass;
   char   unit;  // 'C' or 'F'
   uint8_t brightness;   // SSD1306 contrast 0-255
   bool    nightEn;      // blank/dim the OLED on a schedule
@@ -191,7 +190,7 @@ volatile bool pendingFactoryReset = false;
 
 // Staging buffers for the above (written in handlers, read in loop()).
 String stgSsid, stgWifiPass;
-String stgName, stgUnit, stgHost, stgPass;
+String stgName, stgUnit, stgHost;
 String stgBright, stgNight, stgNStart, stgNEnd, stgNMode, stgTz;
 String stgCtmin, stgCtmax, stgChmin, stgChmax, stgCunit;
 #if ENABLE_MQTT
@@ -231,7 +230,6 @@ void loadConfig() {
   cfg.pass      = cfgPrefs.getString("pass", "");
   cfg.devName   = cfgPrefs.getString("name", DEFAULT_DEVICE_NAME);
   cfg.hostname  = cfgPrefs.getString("host", DEFAULT_HOSTNAME);
-  cfg.adminPass = cfgPrefs.getString("admin", DEFAULT_ADMIN_PASS);
   cfg.unit      = cfgPrefs.getString("unit", String(DEFAULT_TEMP_UNIT))[0];
   cfg.brightness = cfgPrefs.getUChar("bright", DEFAULT_BRIGHTNESS);
   cfg.nightEn    = cfgPrefs.getBool("nightEn", DEFAULT_NIGHT_ENABLE);
@@ -284,7 +282,6 @@ void applyAndSaveSettings() {
   if (stgName.length()) cfg.devName = stgName;
   if (stgUnit.length()) cfg.unit = stgUnit[0];
   if (stgHost.length()) cfg.hostname = stgHost;
-  if (stgPass.length()) cfg.adminPass = stgPass;  // blank = keep current
   if (cfg.unit != 'C' && cfg.unit != 'F') cfg.unit = DEFAULT_TEMP_UNIT;
   if (stgBright.length()) cfg.brightness = (uint8_t)stgBright.toInt();
   if (stgNight.length())  cfg.nightEn = (stgNight.toInt() != 0);
@@ -304,7 +301,6 @@ void applyAndSaveSettings() {
   cfgPrefs.putString("name", cfg.devName);
   cfgPrefs.putString("unit", String(cfg.unit));
   cfgPrefs.putString("host", cfg.hostname);
-  cfgPrefs.putString("admin", cfg.adminPass);
   cfgPrefs.putUChar("bright", cfg.brightness);
   cfgPrefs.putBool("nightEn", cfg.nightEn);
   cfgPrefs.putUShort("nsm", cfg.nightStartMin);
@@ -936,7 +932,7 @@ void registerRunRoutes() {
     auto P = [&](const char* k) -> String {
       return req->hasParam(k, true) ? req->getParam(k, true)->value() : String("");
     };
-    stgName = P("name"); stgUnit = P("unit"); stgHost = P("hostname"); stgPass = P("pass");
+    stgName = P("name"); stgUnit = P("unit"); stgHost = P("hostname");
     stgBright = P("brightness"); stgNight = P("night_en");
     stgNStart = P("night_start"); stgNEnd = P("night_end");
     stgNMode = P("night_mode"); stgTz = P("tz");
@@ -1017,8 +1013,10 @@ void registerPortalRoutes() {
 
 // =================== OTA (browser via ElegantOTA) ===================
 void setupElegantOTA() {
-  // Auth + callbacks before begin() so they apply to the mounted /update route.
-  ElegantOTA.setAuth("admin", cfg.adminPass.c_str());
+  // OTA is intentionally UNAUTHENTICATED: this is a read-only, trusted-LAN
+  // environmental monitor, and the rest of the web UI (settings, restart,
+  // reconfigure) is open too — a password on /update alone was security theater
+  // (and the default was public). Owner/friend can flash freely via the browser.
   ElegantOTA.onStart([]() {
     wdtReconfigure(OTA_WATCHDOG_MS);  // extend WDT for the flash duration
     Serial.println("OTA: starting (WDT extended)");
@@ -1037,7 +1035,6 @@ void setupElegantOTA() {
 #if ENABLE_ARDUINO_OTA
 void setupArduinoOTA() {
   ArduinoOTA.setHostname(cfg.hostname.c_str());
-  ArduinoOTA.setPassword(cfg.adminPass.c_str());
   ArduinoOTA.onStart([]() { wdtReconfigure(OTA_WATCHDOG_MS); });
   ArduinoOTA.onError([](ota_error_t) { wdtReconfigure(WATCHDOG_TIMEOUT_MS); });
   ArduinoOTA.begin();
