@@ -186,8 +186,8 @@ function renderDiag(d){
   rows($('dgAq'),[['Raw BME temp',bon&&d.bme_temp!=null?fmt(d.bme_temp,1)+' °'+unit:dash],
     ['Raw BME humidity',bon&&d.bme_rh!=null?fmt(d.bme_rh,0)+' %':dash],
     ['eCO₂ (est.)',bon&&d.eco2!=null?fmt(d.eco2,0)+' ppm':dash],['bVOC',bon&&d.bvoc!=null?fmt(d.bvoc,2)+' ppm':dash]]);
-  rows($('dgNet'),[['IP address',d.ip||dash],['Hostname',(d.hostname||'airbox')+'.local'],['WiFi SSID',d.ssid||dash],['WiFi RSSI',signal(d.rssi==null?-99:d.rssi)]]);
-  rows($('dgSys'),[['Firmware','v'+(d.fw||'—')],['Uptime',ago(d.uptime)],['Free heap',d.heap==null?dash:(d.heap/1024).toFixed(0)+' KB'],['Last reset',d.reset_reason||dash]]);
+  rows($('dgNet'),[['IP address',d.ip||dash],['MAC address',d.mac||dash],['Hostname',(d.hostname||'airbox')+'.local'],['WiFi SSID',d.ssid||dash],['WiFi channel',d.chan?String(d.chan):dash],['WiFi RSSI',signal(d.rssi==null?-99:d.rssi)]]);
+  rows($('dgSys'),[['Firmware','v'+(d.fw||'—')],['Uptime',ago(d.uptime)],['Chip temp',d.chip_temp==null?dash:Math.round(d.chip_temp)+' °C'],['Free heap',d.heap==null?dash:(d.heap/1024).toFixed(0)+' KB'],['Free heap (min)',d.heap_min==null?dash:(d.heap_min/1024).toFixed(0)+' KB'],['Last reset',d.reset_reason||dash]]);
 }
 
 /* ---- settings ---- */

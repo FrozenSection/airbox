@@ -793,6 +793,9 @@ void buildDataJson(JsonDocument& doc) {
   doc["bme_ok"] = (bmeOK && s.bmeValid);
   doc["rssi"] = WiFi.RSSI();
   doc["ssid"] = WiFi.SSID();
+  doc["chan"] = WiFi.channel();
+  doc["mac"] = WiFi.macAddress();        // for a DHCP reservation
+  doc["bssid"] = WiFi.BSSIDstr();         // JSON-only: which AP/mesh node (no UI row)
   doc["ip"] = WiFi.localIP().toString();
   doc["uptime"] = millis() / 1000;
   doc["heap"] = ESP.getFreeHeap();
