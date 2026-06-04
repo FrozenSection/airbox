@@ -206,15 +206,15 @@ function setNight(on){ $('sNight').classList.toggle('on',on); $('nightSub').clas
 function save(){
   // comfort temp inputs are in setUnit; firmware stores °C and converts back, so send as-is with unit context
   var body='name='+encodeURIComponent($('sName').value)+'&unit='+$('sUnit').value+'&hostname='+encodeURIComponent($('sHost').value)
-    +'&pass='+encodeURIComponent($('sPass').value)+'&brightness='+$('sBright').value
+    +'&brightness='+$('sBright').value
     +'&night_en='+($('sNight').classList.contains('on')?1:0)+'&night_mode='+$('sNMode').value
     +'&night_start='+hhmmToMin($('sNStart').value)+'&night_end='+hhmmToMin($('sNEnd').value)+'&tz='+$('sTz').value
     +'&comfort_tmin='+$('sTmin').value+'&comfort_tmax='+$('sTmax').value
     +'&comfort_hmin='+$('sHmin').value+'&comfort_hmax='+$('sHmax').value
     +'&comfort_unit='+setUnit;
   fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body})
-    .then(function(){$('sMsg').textContent='✓ Saved — some changes apply after restart.';$('sPass').value='';setTimeout(poll,400);})
-    .catch(function(){$('sMsg').textContent='✓ Saved (preview — no device).';$('sPass').value='';});
+    .then(function(){$('sMsg').textContent='✓ Saved — some changes apply after restart.';setTimeout(poll,400);})
+    .catch(function(){$('sMsg').textContent='✓ Saved (preview — no device).';});
 }
 function post(path,confirmMsg){ if(confirmMsg&&!confirm(confirmMsg))return; fetch(path,{method:'POST'}).catch(function(){}); }
 
@@ -264,7 +264,7 @@ function showTab(t){
 document.querySelectorAll('.tabs button').forEach(function(b){b.onclick=function(){showTab(b.dataset.tab);};});
 fillTz();
 $('sNight').onclick=function(){setNight(!$('sNight').classList.contains('on'));settingsDirty=true;};
-['sName','sUnit','sHost','sTz','sBright','sNMode','sNStart','sNEnd','sPass','sTmin','sTmax','sHmin','sHmax'].forEach(function(id){
+['sName','sUnit','sHost','sTz','sBright','sNMode','sNStart','sNEnd','sTmin','sTmax','sHmin','sHmax'].forEach(function(id){
   var e=$(id); if(e) e.addEventListener('input',function(){settingsDirty=true;});
 });
 $('sUnit').addEventListener('change',function(){
@@ -274,7 +274,7 @@ $('sUnit').addEventListener('change',function(){
   setUnit=nu; $('cuLbl').textContent='°'+nu; $('cuLbl2').textContent='°'+nu;
 });
 $('saveBtn').onclick=function(){settingsDirty=false;save();};
-$('discardBtn').onclick=function(){settingsDirty=false;if(DATA)loadSettings(DATA);$('sPass').value='';$('sMsg').textContent='↩ Reverted to saved settings.';};
+$('discardBtn').onclick=function(){settingsDirty=false;if(DATA)loadSettings(DATA);$('sMsg').textContent='↩ Reverted to saved settings.';};
 $('recalBtn').onclick=function(){post('/api/recalibrate','Recalibrate air sensor? IAQ accuracy resets and re-learns over 24–48 h.');};
 $('recfgBtn').onclick=function(){post('/api/reconfigure','Reboot into WiFi setup portal now?');};
 $('restartBtn').onclick=function(){post('/api/restart','Restart the device now?');};

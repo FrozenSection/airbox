@@ -31,9 +31,7 @@ it starts a temporary setup hotspot so you can tell it which network to join.
   OLED, or use the IP address your router assigned).
 - Go to the **Settings** tab and:
   - set a **device name** (e.g. "Office", "Nursery"),
-  - choose **°F or °C**,
-  - **change the admin password** (default is `airbox`) — this protects
-    firmware updates and settings changes.
+  - choose **°F or °C**.
 
 > **Air-quality calibration:** the IAQ reading starts at accuracy 0 and
 > self-calibrates over the first 24–48 hours of normal use. This is expected;
@@ -48,7 +46,7 @@ it starts a temporary setup hotspot so you can tell it which network to join.
 - [ ] `http://airbox.local` loads the dashboard; live values update.
 - [ ] Trend charts begin filling in (first points appear after a few minutes).
 - [ ] °F/°C toggle and device name persist across a reboot.
-- [ ] Browser OTA at `/update` accepts the admin password and flashes a new
-      build, after which the device reboots on the new firmware.
+- [ ] Browser OTA at `/update` flashes a new build (no login), after which the
+      device reboots on the new firmware.
 - [ ] Holding **BOOT** for ~3 s returns the device to the setup portal, and the
       IAQ calibration is still intact afterward.

@@ -64,8 +64,6 @@ Grouped into sections:
   the hours you set, the OLED either **blanks** or **dims** — your choice; the
   sub-options grey out when it's off). The dashboard and sensors keep running
   even while the screen is dark.
-- **Security** — Admin Password (protects firmware updates and settings; blank
-  keeps the current one). **Change the default (`airbox`) after first setup.**
 - **Maintenance** — Firmware update (browser OTA), Recalibrate air sensor
   (clears the BSEC baseline → IAQ accuracy 0), Reconfigure WiFi, Restart (the
   last two: see [recovery.md](recovery.md)).
