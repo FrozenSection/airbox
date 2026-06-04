@@ -104,8 +104,10 @@ function chart(id,arr,color,minSpan,dec,suf){
 function spanLabel(){
   if(!HIST||!HIST.t||HIST.t.length<2) return '−8h';
   var sp=(HIST.t.length-1)*(HIST.interval_s||300);
-  if(sp<5400) return '−'+Math.round(sp/60)+'m';
-  var hr=sp/3600; return '−'+(hr<10?hr.toFixed(1):Math.round(hr))+'h';
+  // Whole units only — "−7.9h" reads like a bug. Minutes under an hour, then
+  // rounded hours (so the full 96-sample / 7.9 h window shows a clean "−8h").
+  if(sp<3600) return '−'+Math.round(sp/60)+'m';
+  return '−'+Math.round(sp/3600)+'h';
 }
 function redraw(){ if(!HIST)return;
   chart('cT',HIST.t,SIG.t,0.7,1,'°'); chart('cH',HIST.rh,SIG.h,2,0,'%'); chart('cP',HIST.p,SIG.p,1.5,0,''); chart('cI',HIST.iaq,SIG.i,8,0,'');
