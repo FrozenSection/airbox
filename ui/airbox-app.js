@@ -283,6 +283,16 @@ $('discardBtn').onclick=function(){if(DATA)loadSettings(DATA);flashDone('↩ Rev
 $('recalBtn').onclick=function(){post('/api/recalibrate','Recalibrate air sensor? IAQ accuracy resets and re-learns over 24–48 h.');};
 $('recfgBtn').onclick=function(){post('/api/reconfigure','Reboot into WiFi setup portal now?');};
 $('restartBtn').onclick=function(){post('/api/restart','Restart the device now?');};
+$('clrHistBtn').onclick=function(){
+  if(!confirm('Clear all saved trend history? The charts will start over.'))return;
+  fetch('/api/clear-history',{method:'POST'}).then(function(){setTimeout(loadHist,800);}).catch(function(){});
+};
+$('factoryBtn').onclick=function(){
+  var w=$('frWifi').checked, c=$('frCalib').checked, ex=[];
+  if(w)ex.push('WiFi'); if(c)ex.push('sensor calibration');
+  if(!confirm('Factory reset — restore all settings to defaults'+(ex.length?', and also wipe '+ex.join(' + '):'')+'?\n\nThis cannot be undone.'))return;
+  fetch('/api/factory-reset',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'wifi='+(w?1:0)+'&calib='+(c?1:0)}).catch(function(){});
+};
 window.addEventListener('resize',redraw);
 
 // Refresh both immediately when the tab regains focus (covers the 5-min history

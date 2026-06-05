@@ -186,7 +186,10 @@ volatile bool pendingSaveSettings = false;
 volatile bool pendingRestart = false;
 volatile bool pendingReconfigure = false;
 volatile bool pendingRecalibrate = false;
-volatile bool pendingFactoryReset = false;
+volatile bool pendingFactoryReset = false;   // BOOT-button WiFi wipe (legacy name)
+volatile bool pendingClearHistory = false;   // wipe the trend ring buffer (no reboot)
+volatile bool pendingFullReset = false;      // settings -> defaults (+ optional WiFi/calib), reboot
+volatile bool frWifi = false, frCalib = false;
 
 // Staging buffers for the above (written in handlers, read in loop()).
 String stgSsid, stgWifiPass;
@@ -956,6 +959,14 @@ void registerRunRoutes() {
   server.on("/api/reconfigure", HTTP_POST, [](AsyncWebServerRequest* req) {
     pendingReconfigure = true; req->send(200, "application/json", "{\"ok\":true}");
   });
+  server.on("/api/clear-history", HTTP_POST, [](AsyncWebServerRequest* req) {
+    pendingClearHistory = true; req->send(200, "application/json", "{\"ok\":true}");
+  });
+  server.on("/api/factory-reset", HTTP_POST, [](AsyncWebServerRequest* req) {
+    frWifi  = req->hasParam("wifi", true)  && req->getParam("wifi", true)->value() == "1";
+    frCalib = req->hasParam("calib", true) && req->getParam("calib", true)->value() == "1";
+    pendingFullReset = true; req->send(200, "application/json", "{\"ok\":true}");
+  });
   server.onNotFound([](AsyncWebServerRequest* req) { req->send(404, "text/plain", "Not found"); });
 }
 
@@ -1278,7 +1289,7 @@ void handlePendingActions() {
   // Every branch below that reboots flushes history first, so a planned restart
   // never loses recent trend points.
   if (pendingFactoryReset || pendingReconfigure || pendingSaveWifi
-      || pendingRecalibrate || pendingRestart) {
+      || pendingRecalibrate || pendingRestart || pendingFullReset) {
     saveHistory();
   }
   if (pendingFactoryReset || pendingReconfigure) {
@@ -1305,6 +1316,30 @@ void handlePendingActions() {
     bsecPrefs.clear();
     bsecPrefs.end();
     delay(500);
+    ESP.restart();
+  }
+  if (pendingClearHistory) {
+    pendingClearHistory = false;
+    histHead = 0; histCount = 0;            // empties the ring buffer (no reboot)
+    if (fsOK) LittleFS.remove(HISTORY_FILE);
+    Serial.println("Trend history cleared");
+  }
+  if (pendingFullReset) {
+    pendingFullReset = false;
+    Serial.printf("Factory reset (wifi=%d calib=%d), rebooting\n", frWifi, frCalib);
+    if (displayOK) {
+      display.clearDisplay(); display.setCursor(0, 0);
+      display.println("Factory reset...\nRebooting"); display.display();
+    }
+    // Wipe the whole settings namespace so everything reverts to config.h defaults;
+    // keep WiFi creds unless the user opted to clear them too.
+    String ks = cfg.ssid, kp = cfg.pass;
+    cfgPrefs.begin("cfg", false);
+    cfgPrefs.clear();
+    if (!frWifi) { cfgPrefs.putString("ssid", ks); cfgPrefs.putString("pass", kp); }
+    cfgPrefs.end();
+    if (frCalib) { bsecPrefs.begin("bsec", false); bsecPrefs.clear(); bsecPrefs.end(); }
+    delay(800);
     ESP.restart();
   }
   if (pendingSaveSettings) {
