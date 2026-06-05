@@ -186,7 +186,7 @@ volatile bool pendingSaveSettings = false;
 volatile bool pendingRestart = false;
 volatile bool pendingReconfigure = false;
 volatile bool pendingRecalibrate = false;
-volatile bool pendingFactoryReset = false;   // BOOT-button WiFi wipe (legacy name)
+volatile bool pendingWifiReset = false;   // BOOT-button WiFi wipe -> setup portal (same as Reconfigure WiFi)
 volatile bool pendingClearHistory = false;   // wipe the trend ring buffer (no reboot)
 volatile bool pendingFullReset = false;      // settings -> defaults (+ optional WiFi/calib), reboot
 volatile bool frWifi = false, frCalib = false;
@@ -1288,11 +1288,11 @@ void startRun() {
 void handlePendingActions() {
   // Every branch below that reboots flushes history first, so a planned restart
   // never loses recent trend points.
-  if (pendingFactoryReset || pendingReconfigure || pendingSaveWifi
+  if (pendingWifiReset || pendingReconfigure || pendingSaveWifi
       || pendingRecalibrate || pendingRestart || pendingFullReset) {
     saveHistory();
   }
-  if (pendingFactoryReset || pendingReconfigure) {
+  if (pendingWifiReset || pendingReconfigure) {
     Serial.println("Wiping WiFi creds, rebooting into portal");
     if (displayOK) {
       display.clearDisplay(); display.setCursor(0, 0);
@@ -1366,7 +1366,7 @@ void checkBootButton() {
   else if (low && wasLow && !fired) {
     if (millis() - pressStart >= FACTORY_RESET_HOLD_MS) {
       fired = true;
-      pendingFactoryReset = true;
+      pendingWifiReset = true;
     }
   } else if (!low) {
     wasLow = false;
