@@ -147,6 +147,13 @@ input[type=time]::-webkit-date-and-time-value{text-align:center}
 .btns{display:flex;flex-wrap:wrap;gap:10px}
 .btns.stack{flex-direction:column;flex-wrap:nowrap}
 .btns.stack .btn{width:100%;text-align:center}
+/* Factory reset — isolated at the bottom of Maintenance, clearly the danger zone */
+.frsep{border-top:1px solid var(--line2);margin:18px 0 14px}
+.frbox{display:flex;flex-direction:column;gap:9px}
+.frttl{font-weight:600;font-size:14px;color:var(--poor)}
+.frchk{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--dim);cursor:pointer}
+.frchk input{width:16px;height:16px;accent-color:var(--poor);flex:0 0 auto;margin:0}
+.frbox .btn.danger{align-self:flex-start;margin-top:2px}
 .msg{font-size:13.5px;font-weight:500;color:var(--good)}
 
 /* responsive */
@@ -298,9 +305,18 @@ input[type=time]::-webkit-date-and-time-value{text-align:center}
         <div class="card panel"><h3 class="uc">Maintenance</h3>
           <div class="btns stack"><a class="btn" href="/update" style="text-decoration:none">Firmware update (OTA)</a>
             <button class="btn" id="recfgBtn">Reconfigure WiFi</button>
+            <button class="btn" id="restartBtn">Restart device</button>
             <button class="btn amber" id="recalBtn">Recalibrate air sensor</button>
-            <button class="btn danger" id="restartBtn">Restart device</button></div>
-          <div class="pnote">Recalibrate clears the BSEC baseline — IAQ accuracy drops to 0 and re-learns over 24–48 h. Reconfigure WiFi reboots into the setup portal (you’ll rejoin “AirBox-Setup” to pick a new network).</div>
+            <button class="btn amber" id="clrHistBtn">Clear history</button></div>
+          <div class="pnote">Recalibrate clears the BSEC baseline — IAQ accuracy drops to 0 and re-learns over 24–48 h. Clear history wipes the 7-day trend charts. Reconfigure WiFi reboots into the setup portal (you’ll rejoin “AirBox-Setup” to pick a new network).</div>
+          <div class="frsep"></div>
+          <div class="frbox">
+            <div class="frttl">Factory reset</div>
+            <div class="pnote" style="margin:0 0 2px">Restores all settings to defaults. WiFi and air-sensor calibration are kept unless you tick these:</div>
+            <label class="frchk"><input type="checkbox" id="frWifi"/> Also wipe WiFi (reboots into setup portal)</label>
+            <label class="frchk"><input type="checkbox" id="frCalib"/> Also clear air-sensor calibration (IAQ re-learns 24–48 h)</label>
+            <button class="btn danger" id="factoryBtn">Factory reset</button>
+          </div>
         </div>
       </div>
     </div>
