@@ -87,10 +87,10 @@ canvas{display:block;width:100%;height:126px}
 
 /* diagnostics + settings */
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
-/* Save/Discard span the full grid width and sit last — so they're at the bottom
-   of the settings on desktop AND mobile (not stranded mid-page when the two
-   columns stack into one). */
-.actions{grid-column:1 / -1}
+/* Save/Discard: a deliberate footer — full-width hairline divider above, buttons
+   centered — so they read as the end of the form instead of floating in the gap
+   under the shorter column. Spans the grid on desktop; last element on mobile. */
+.actions{grid-column:1 / -1;justify-content:center;border-top:1px solid var(--line);padding-top:22px;margin-top:4px}
 .panel{display:flex;flex-direction:column;gap:0}
 .panel h3{margin:0 0 4px}
 .drow{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 0;border-bottom:1px solid var(--line)}
@@ -263,6 +263,12 @@ input[type=time]::-webkit-date-and-time-value{text-align:center}
           <div class="field"><label>Relative humidity (%)</label>
             <div class="minmax"><input type="number" id="sHmin"/><span>to</span><input type="number" id="sHmax"/><span>%</span></div></div>
         </div>
+        <div class="card panel"><h3 class="uc">About this device</h3>
+          <div class="field" style="gap:3px;margin-top:14px"><span style="color:var(--faint);font-size:12px">Model</span><span style="font-weight:500;font-size:14px">QT Py ESP32-S3</span></div>
+          <div class="field" style="gap:3px"><span style="color:var(--faint);font-size:12px">Sensors</span><span style="font-weight:500;font-size:14px">BME688 · HDC3022</span></div>
+          <div class="field" style="gap:3px"><span style="color:var(--faint);font-size:12px">Display</span><span style="font-weight:500;font-size:14px">SSD1306 OLED · 0.96″</span></div>
+          <div class="field" style="gap:3px"><span style="color:var(--faint);font-size:12px">Enclosure</span><span style="font-weight:500;font-size:14px">PETG</span></div>
+        </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:18px">
         <div class="card panel"><h3 class="uc">Display</h3>
@@ -285,12 +291,6 @@ input[type=time]::-webkit-date-and-time-value{text-align:center}
             <button class="btn" id="recfgBtn">Reconfigure WiFi</button>
             <button class="btn danger" id="restartBtn">Restart device</button></div>
           <div class="pnote">Recalibrate clears the BSEC baseline — IAQ accuracy drops to 0 and re-learns over 24–48 h. Reconfigure WiFi reboots into the setup portal (you’ll rejoin “AirBox-Setup” to pick a new network).</div>
-        </div>
-        <div class="card panel"><h3 class="uc">About this device</h3>
-          <div class="field" style="gap:3px;margin-top:14px"><span style="color:var(--faint);font-size:12px">Model</span><span style="font-weight:500;font-size:14px">QT Py ESP32-S3</span></div>
-          <div class="field" style="gap:3px"><span style="color:var(--faint);font-size:12px">Sensors</span><span style="font-weight:500;font-size:14px">BME688 · HDC3022</span></div>
-          <div class="field" style="gap:3px"><span style="color:var(--faint);font-size:12px">Display</span><span style="font-weight:500;font-size:14px">SSD1306 OLED · 0.96″</span></div>
-          <div class="field" style="gap:3px"><span style="color:var(--faint);font-size:12px">Enclosure</span><span style="font-weight:500;font-size:14px">PETG</span></div>
         </div>
       </div>
       <div class="row actions"><button class="btn primary" id="saveBtn">Save settings</button>
