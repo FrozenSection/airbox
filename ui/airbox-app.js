@@ -213,8 +213,8 @@ function save(){
     +'&comfort_hmin='+$('sHmin').value+'&comfort_hmax='+$('sHmax').value
     +'&comfort_unit='+setUnit;
   fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body})
-    .then(function(){$('sMsg').textContent='✓ Saved — some changes apply after restart.';setTimeout(poll,400);})
-    .catch(function(){$('sMsg').textContent='✓ Saved (preview — no device).';});
+    .then(function(){flashDone('✓ Saved — some changes apply after restart.');setTimeout(poll,400);})
+    .catch(function(){flashDone('✓ Saved (preview — no device).');});
 }
 function post(path,confirmMsg){ if(confirmMsg&&!confirm(confirmMsg))return; fetch(path,{method:'POST'}).catch(function(){}); }
 
@@ -253,7 +253,12 @@ function loadHist(){
 function staleCheck(){ if(!PREVIEW && lastOk && Date.now()-lastOk>12000) markStale(); }
 
 /* ---- tabs ---- */
-var settingsDirty=false;
+var settingsDirty=false, dirtyN=0;
+// The Save/Discard bar (shown via #set.dirty) pops up the moment any setting is
+// edited, so Save can't be missed below the fold. flashDone shows a brief result
+// then hides it — unless a new edit landed during the window (dirtyN guards that).
+function setDirty(v){ settingsDirty=v; $('set').classList.toggle('dirty',v); if(v){ dirtyN++; $('sMsg').textContent='Unsaved changes'; } }
+function flashDone(msg){ var n=dirtyN; $('sMsg').textContent=msg; setTimeout(function(){ if(dirtyN===n) setDirty(false); }, 1800); }
 function showTab(t){
   ['dash','diag','set'].forEach(function(s){$(s).classList.toggle('hide',s!==t);});
   document.querySelectorAll('.tabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===t);});
@@ -263,9 +268,9 @@ function showTab(t){
 /* ---- wire up ---- */
 document.querySelectorAll('.tabs button').forEach(function(b){b.onclick=function(){showTab(b.dataset.tab);};});
 fillTz();
-$('sNight').onclick=function(){setNight(!$('sNight').classList.contains('on'));settingsDirty=true;};
+$('sNight').onclick=function(){setNight(!$('sNight').classList.contains('on'));setDirty(true);};
 ['sName','sUnit','sHost','sTz','sBright','sNMode','sNStart','sNEnd','sTmin','sTmax','sHmin','sHmax'].forEach(function(id){
-  var e=$(id); if(e) e.addEventListener('input',function(){settingsDirty=true;});
+  var e=$(id); if(e) e.addEventListener('input',function(){setDirty(true);});
 });
 $('sUnit').addEventListener('change',function(){
   var nu=$('sUnit').value; if(nu===setUnit)return;
@@ -273,8 +278,8 @@ $('sUnit').addEventListener('change',function(){
   $('sTmin').value=conv($('sTmin').value); $('sTmax').value=conv($('sTmax').value);
   setUnit=nu; $('cuLbl').textContent='°'+nu; $('cuLbl2').textContent='°'+nu;
 });
-$('saveBtn').onclick=function(){settingsDirty=false;save();};
-$('discardBtn').onclick=function(){settingsDirty=false;if(DATA)loadSettings(DATA);$('sMsg').textContent='↩ Reverted to saved settings.';};
+$('saveBtn').onclick=function(){save();};
+$('discardBtn').onclick=function(){if(DATA)loadSettings(DATA);flashDone('↩ Reverted');};
 $('recalBtn').onclick=function(){post('/api/recalibrate','Recalibrate air sensor? IAQ accuracy resets and re-learns over 24–48 h.');};
 $('recfgBtn').onclick=function(){post('/api/reconfigure','Reboot into WiFi setup portal now?');};
 $('restartBtn').onclick=function(){post('/api/restart','Restart the device now?');};

@@ -87,10 +87,18 @@ canvas{display:block;width:100%;height:126px}
 
 /* diagnostics + settings */
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
-/* Save/Discard: a deliberate footer — full-width hairline divider above, buttons
-   centered — so they read as the end of the form instead of floating in the gap
-   under the shorter column. Spans the grid on desktop; last element on mobile. */
-.actions{grid-column:1 / -1;justify-content:center;border-top:1px solid var(--line);padding-top:22px;margin-top:4px}
+/* Save/Discard live in a bar pinned to the bottom of the screen that slides up
+   the moment a setting changes (#set gets .dirty), so Save can never be missed
+   below the fold — and the page stays clean when there's nothing to save. */
+.actions{position:fixed;left:0;right:0;bottom:0;z-index:60;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:13px 22px calc(13px + env(safe-area-inset-bottom)) 22px;
+  background:color-mix(in oklch,var(--card) 92%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border-top:1px solid var(--line);box-shadow:0 -8px 26px rgba(0,0,0,.32);
+  transform:translateY(125%);transition:transform .22s ease}
+#set.dirty .actions{transform:translateY(0)}
+#set.dirty{padding-bottom:76px}           /* reserve room so the bar can't cover the last card */
+.actions .amsg{font-size:14px;font-weight:500;color:var(--dim)}
+.actions .abtns{display:flex;gap:10px;margin-left:auto}
 .panel{display:flex;flex-direction:column;gap:0}
 .panel h3{margin:0 0 4px}
 .drow{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 0;border-bottom:1px solid var(--line)}
@@ -293,8 +301,10 @@ input[type=time]::-webkit-date-and-time-value{text-align:center}
           <div class="pnote">Recalibrate clears the BSEC baseline — IAQ accuracy drops to 0 and re-learns over 24–48 h. Reconfigure WiFi reboots into the setup portal (you’ll rejoin “AirBox-Setup” to pick a new network).</div>
         </div>
       </div>
-      <div class="row actions"><button class="btn primary" id="saveBtn">Save settings</button>
-        <button class="btn" id="discardBtn">Discard changes</button><span class="msg" id="sMsg"></span></div>
+    </div>
+    <div class="actions" id="setActions">
+      <span class="amsg" id="sMsg">Unsaved changes</span>
+      <span class="abtns"><button class="btn" id="discardBtn">Discard</button><button class="btn primary" id="saveBtn">Save settings</button></span>
     </div>
   </section>
 
