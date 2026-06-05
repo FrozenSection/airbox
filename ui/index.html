@@ -145,6 +145,8 @@ input[type=time]::-webkit-date-and-time-value{text-align:center}
    overflowing — native <input type=time> has a wide intrinsic min-width on iOS */
 .row .field{min-width:0}
 .btns{display:flex;flex-wrap:wrap;gap:10px}
+.btns.stack{flex-direction:column;flex-wrap:nowrap}
+.btns.stack .btn{width:100%;text-align:center}
 .msg{font-size:13.5px;font-weight:500;color:var(--good)}
 
 /* responsive */
@@ -294,9 +296,9 @@ input[type=time]::-webkit-date-and-time-value{text-align:center}
           </div>
         </div>
         <div class="card panel"><h3 class="uc">Maintenance</h3>
-          <div class="btns"><a class="btn" href="/update" style="text-decoration:none">Firmware update (OTA)</a>
-            <button class="btn amber" id="recalBtn">Recalibrate air sensor</button>
+          <div class="btns stack"><a class="btn" href="/update" style="text-decoration:none">Firmware update (OTA)</a>
             <button class="btn" id="recfgBtn">Reconfigure WiFi</button>
+            <button class="btn amber" id="recalBtn">Recalibrate air sensor</button>
             <button class="btn danger" id="restartBtn">Restart device</button></div>
           <div class="pnote">Recalibrate clears the BSEC baseline — IAQ accuracy drops to 0 and re-learns over 24–48 h. Reconfigure WiFi reboots into the setup portal (you’ll rejoin “AirBox-Setup” to pick a new network).</div>
         </div>
