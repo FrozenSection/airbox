@@ -20,9 +20,13 @@ If want to move it to a different network:
 3. The device reboots into the `AirBox-Setup` portal — rejoin it and pick the
    new network.
 
-## 3. Physical reset — hold BOOT (always works)
+## 3. Physical reset — hold BOOT (requires opening the enclosure)
 
-If the dashboard is unreachable (forgotten which network, IP changed, etc.):
+A last resort if the dashboard is unreachable *and* the device won't fall back
+to the portal on its own. The BOOT button is **inside the enclosure** (no
+external button or pin-hole), so this one needs you to **open the case first** —
+no trouble with a couple of screws/clips, just not a no-tools step. Once it's
+open:
 
 1. With the device powered and running, **press and hold the BOOT button for
    about 3 seconds.**
@@ -32,6 +36,9 @@ If the dashboard is unreachable (forgotten which network, IP changed, etc.):
 > Press BOOT **after** the device has booted — don't hold it during power-up
 > (holding it at reset puts the ESP32-S3 into USB flashing mode instead, which
 > is a different thing).
+>
+> In practice you'll rarely get here: methods 1 and 2 above need no tools, and
+> cover almost every "can't reach it" case. Reach for BOOT only when both fail.
 
 ## What is *not* erased
 
@@ -58,4 +65,6 @@ sensor** on the dashboard. IAQ accuracy drops to 0 and re-learns over 24–48 h.
 
 If an update is ever interrupted (power loss mid-flash), the device's bootloader
 keeps the previous working firmware on its other partition; power-cycle and
-retry, or re-flash over USB.
+retry, or re-flash over USB. A normal USB re-flash needs no button presses; only
+a fully unresponsive board would need manual DFU mode (hold the internal BOOT
+button at power-up), which means opening the enclosure.
