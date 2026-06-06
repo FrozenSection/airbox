@@ -290,11 +290,20 @@ void applyTimezone() {
 }
 
 void applyAndSaveSettings() {
-  if (stgName.length()) cfg.devName = stgName;
+  if (stgName.length()) cfg.devName = stgName.substring(0, 32);
   if (stgUnit.length()) cfg.unit = stgUnit[0];
-  if (stgHost.length()) cfg.hostname = stgHost;
+  if (stgHost.length()) {
+    // Keep the mDNS hostname DNS-safe: lowercase [a-z0-9-], max 32 chars. Strips
+    // anything else (spaces, punctuation, markup) rather than persisting garbage.
+    String h = stgHost; h.toLowerCase(); String clean;
+    for (size_t i = 0; i < h.length() && clean.length() < 32; i++) {
+      char ch = h[i];
+      if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-') clean += ch;
+    }
+    if (clean.length()) cfg.hostname = clean;
+  }
   if (cfg.unit != 'C' && cfg.unit != 'F') cfg.unit = DEFAULT_TEMP_UNIT;
-  if (stgBright.length()) cfg.brightness = (uint8_t)stgBright.toInt();
+  if (stgBright.length()) cfg.brightness = (uint8_t)constrain(stgBright.toInt(), 0, 255);
   if (stgNight.length())  cfg.nightEn = (stgNight.toInt() != 0);
   if (stgNStart.length()) cfg.nightStartMin = (uint16_t)constrain(stgNStart.toInt(), 0, 1439);
   if (stgNEnd.length())   cfg.nightEndMin = (uint16_t)constrain(stgNEnd.toInt(), 0, 1439);
@@ -308,6 +317,12 @@ void applyAndSaveSettings() {
   if (stgCtmax.length()) cfg.comfortTmaxC = (stgCunit == "F") ? (stgCtmax.toFloat() - 32.0f) * 5.0f / 9.0f : stgCtmax.toFloat();
   if (stgChmin.length()) cfg.comfortHmin = (uint8_t)constrain(stgChmin.toInt(), 0, 100);
   if (stgChmax.length()) cfg.comfortHmax = (uint8_t)constrain(stgChmax.toInt(), 0, 100);
+  // Sanity-clamp comfort temps to a sane indoor band (canonical °C) and ensure
+  // min <= max, so a typo or an inverted/garbage range can't persist.
+  cfg.comfortTminC = constrain(cfg.comfortTminC, 0.0f, 45.0f);
+  cfg.comfortTmaxC = constrain(cfg.comfortTmaxC, 0.0f, 45.0f);
+  if (cfg.comfortTminC > cfg.comfortTmaxC) { float t = cfg.comfortTminC; cfg.comfortTminC = cfg.comfortTmaxC; cfg.comfortTmaxC = t; }
+  if (cfg.comfortHmin > cfg.comfortHmax) { uint8_t t = cfg.comfortHmin; cfg.comfortHmin = cfg.comfortHmax; cfg.comfortHmax = t; }
   cfgPrefs.begin("cfg", false);
   cfgPrefs.putString("name", cfg.devName);
   cfgPrefs.putString("unit", String(cfg.unit));
@@ -879,6 +894,15 @@ static int histCsvRow(int idx, char* out, size_t sz) {
   return n;
 }
 
+// CSRF guard for state-changing endpoints: require the custom X-AirBox header
+// that only the dashboard's own fetch() sets. A cross-origin page can't add a
+// custom header to a simple request, and a fetch that does triggers a CORS
+// preflight we never grant — so this blocks drive-by CSRF (e.g. a malicious page
+// silently POSTing /api/factory-reset) without putting a password on the open
+// dashboard. Read-only GETs are intentionally left open.
+#define REQUIRE_CSRF(req) do { if (!(req)->hasHeader("X-AirBox")) { \
+  (req)->send(403, "application/json", "{\"error\":\"forbidden\"}"); return; } } while (0)
+
 void registerRunRoutes() {
   server.on("/", HTTP_GET, [](AsyncWebServerRequest* req) {
     // Serve the dashboard gzip-compressed and zero-copy: the (uint8_t*, len)
@@ -951,6 +975,7 @@ void registerRunRoutes() {
     req->send(res);
   });
   server.on("/api/settings", HTTP_POST, [](AsyncWebServerRequest* req) {
+    REQUIRE_CSRF(req);
     auto P = [&](const char* k) -> String {
       return req->hasParam(k, true) ? req->getParam(k, true)->value() : String("");
     };
@@ -967,18 +992,23 @@ void registerRunRoutes() {
     req->send(200, "application/json", "{\"ok\":true}");
   });
   server.on("/api/restart", HTTP_POST, [](AsyncWebServerRequest* req) {
+    REQUIRE_CSRF(req);
     pendingRestart = true; req->send(200, "application/json", "{\"ok\":true}");
   });
   server.on("/api/recalibrate", HTTP_POST, [](AsyncWebServerRequest* req) {
+    REQUIRE_CSRF(req);
     pendingRecalibrate = true; req->send(200, "application/json", "{\"ok\":true}");
   });
   server.on("/api/reconfigure", HTTP_POST, [](AsyncWebServerRequest* req) {
+    REQUIRE_CSRF(req);
     pendingReconfigure = true; req->send(200, "application/json", "{\"ok\":true}");
   });
   server.on("/api/clear-history", HTTP_POST, [](AsyncWebServerRequest* req) {
+    REQUIRE_CSRF(req);
     pendingClearHistory = true; req->send(200, "application/json", "{\"ok\":true}");
   });
   server.on("/api/factory-reset", HTTP_POST, [](AsyncWebServerRequest* req) {
+    REQUIRE_CSRF(req);
     frWifi  = req->hasParam("wifi", true)  && req->getParam("wifi", true)->value() == "1";
     frCalib = req->hasParam("calib", true) && req->getParam("calib", true)->value() == "1";
     pendingFullReset = true; req->send(200, "application/json", "{\"ok\":true}");
