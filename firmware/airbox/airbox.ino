@@ -42,6 +42,7 @@
 #include <ElegantOTA.h>
 
 #include "web_ui.h"
+#include "favicon_png.h"
 
 #if ENABLE_MQTT
 #include <PubSubClient.h>
@@ -884,6 +885,14 @@ void registerRunRoutes() {
       req->beginResponse(200, "text/html", INDEX_HTML_GZ, INDEX_HTML_GZ_LEN);
     res->addHeader("Content-Encoding", "gzip");
     res->addHeader("Cache-Control", "max-age=86400");
+    req->send(res);
+  });
+  // "AB" monogram favicon — browsers fetch it normally and cache it, so a route
+  // keeps it out of the page payload (and kills the default /favicon.ico 404).
+  server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest* req) {
+    AsyncWebServerResponse* res =
+      req->beginResponse(200, "image/png", FAVICON_PNG, FAVICON_PNG_LEN);
+    res->addHeader("Cache-Control", "max-age=604800");
     req->send(res);
   });
   server.on("/api/data", HTTP_GET, [](AsyncWebServerRequest* req) {
