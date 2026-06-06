@@ -46,7 +46,7 @@ it starts a temporary setup hotspot so you can tell it which network to join.
 - [ ] `http://airbox.local` loads the dashboard; live values update.
 - [ ] Trend charts begin filling in (first points appear after a few minutes).
 - [ ] °F/°C toggle and device name persist across a reboot.
-- [ ] Browser OTA at `/update` flashes a new build (no login), after which the
-      device reboots on the new firmware.
+- [ ] Browser OTA at `/update` prompts for the update login, then flashes a new
+      build, after which the device reboots on the new firmware.
 - [ ] Holding **BOOT** for ~3 s returns the device to the setup portal, and the
       IAQ calibration is still intact afterward.

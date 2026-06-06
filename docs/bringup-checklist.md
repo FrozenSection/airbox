@@ -32,6 +32,12 @@ libraries. To rebuild the toolchain elsewhere, see
       **required.** The board default (`tinyuf2_noota`) has *no* OTA slot and no
       filesystem, which breaks browser OTA *and* persistent history. With
       arduino-cli, append `:PartitionScheme=min_spiffs` to the FQBN (below).
+- [ ] **Create `firmware/airbox/secret.h`** — copy `secret.h.example` to
+      `secret.h` and set `OTA_USERNAME`/`OTA_PASSWORD` before building, so browser
+      OTA is password-protected. `secret.h` is gitignored (creds never hit the
+      repo). Without it the build still compiles but OTA is open and emits a
+      `#warning`. (For a USB-only build with no network flash path, set
+      `ENABLE_NET_OTA 0` instead.)
 
 ## 3. Compile & flash
 
@@ -110,7 +116,8 @@ arduino-cli monitor -p /dev/cu.usbmodemXXXX -c baudrate=115200   # watch boot lo
 - [ ] Bump `FW_VERSION` in `config.h` (e.g. `1.0.1`), recompile to a `.bin`:
       `arduino-cli compile --fqbn $FQBN --output-dir build firmware/airbox`
       (the `.bin` lands in `build/`).
-- [ ] Go to `http://airbox.local/update` (no login) and upload the `.bin`.
+- [ ] Go to `http://airbox.local/update`, enter the OTA login (the
+      `OTA_USERNAME`/`OTA_PASSWORD` from `secret.h`), and upload the `.bin`.
       Device reboots; confirm the new version on the Diagnostics tab. Confirm it
       did **not** reset/hang mid-flash.
 
@@ -128,6 +135,9 @@ arduino-cli monitor -p /dev/cu.usbmodemXXXX -c baudrate=115200   # watch boot lo
       friend — but leave the BSEC calibration intact so he gets a head start.
 - [ ] Print/share: the setup steps in [`first-time-setup.md`](first-time-setup.md)
       and the dashboard guide in [`dashboard.md`](dashboard.md).
+- [ ] **Share the OTA login separately** (verbally / out-of-band) — `secret.h`
+      is gitignored, so the `OTA_USERNAME`/`OTA_PASSWORD` baked into the unit
+      aren't in the repo. He needs them to flash a new build from the browser.
 - [ ] Push the repo public and send him the link.
 - [ ] (Optional) Drop the enclosure STL/STEP into
       [`hardware/enclosure/`](../hardware/enclosure/) and commit.
