@@ -104,12 +104,12 @@ function chart(id,arr,color,minSpan,dec,suf){
   }
 }
 // Left axis label = the actual span of data present, so it reads e.g. -15m
-// early on and grows to -8h once the 8 h chart window is full.
+// early on and grows to -12h once the 12 h chart window is full.
 function spanLabel(){
-  if(!HIST||!HIST.t||HIST.t.length<2) return '−8h';
+  if(!HIST||!HIST.t||HIST.t.length<2) return '−12h';
   var sp=(HIST.t.length-1)*(HIST.interval_s||300);
-  // Whole units only — "−7.9h" reads like a bug. Minutes under an hour, then
-  // rounded hours (so the full 96-sample / 7.9 h window shows a clean "−8h").
+  // Whole units only — "−11.9h" reads like a bug. Minutes under an hour, then
+  // rounded hours (so the full 144-sample / 11.9 h window shows a clean "−12h").
   if(sp<3600) return '−'+Math.round(sp/60)+'m';
   return '−'+Math.round(sp/3600)+'h';
 }

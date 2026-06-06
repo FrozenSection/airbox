@@ -36,7 +36,7 @@ device's screen.)*
 
 ## Reading it
 Four live tiles — **Temperature, Humidity, Pressure, Air Quality (IAQ)** — each
-with an 8-hour trend chart.
+with a 12-hour trend chart.
 - **IAQ** is a 0–500 index (lower = cleaner). It needs **24–48 h** of run time to
   self-calibrate; "calibration" climbs from 0 to 3 on the Diagnostics tab.
 - **Diagnostics** tab: sensor health, network info, system stats, and a
