@@ -49,6 +49,8 @@ bus, `Wire1`). See [`hardware/`](hardware/) for the enclosure.
 3. **Using the dashboard** — what each reading means and what to trust:
    [`docs/dashboard.md`](docs/dashboard.md).
 4. **Changing networks / recovery** — [`docs/recovery.md`](docs/recovery.md).
+5. **Terminal / HTTP API** — drive it from `curl` or the USB serial console:
+   [`docs/api.md`](docs/api.md).
 
 ## Repository layout
 
