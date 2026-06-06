@@ -64,11 +64,16 @@ curl -s http://airbox.local/api/history.csv  -o airbox-history.csv  # full 7 day
 
 ### Actions (POST)
 
+State-changing requests require the header **`X-AirBox: 1`** (a lightweight
+CSRF guard — a malicious web page can't set a custom header on a cross-origin
+request, so it can't trigger these). GET/read endpoints don't need it.
+
 ```bash
-curl -X POST http://airbox.local/api/restart                          # reboot
-curl -X POST http://airbox.local/api/recalibrate                      # kick BSEC recalibration
-curl -X POST http://airbox.local/api/clear-history                    # wipe trend log only
-curl -X POST http://airbox.local/api/factory-reset -d 'wifi=1&calib=1'
+H='-H X-AirBox:1'
+curl $H -X POST http://airbox.local/api/restart                          # reboot
+curl $H -X POST http://airbox.local/api/recalibrate                      # kick BSEC recalibration
+curl $H -X POST http://airbox.local/api/clear-history                    # wipe trend log only
+curl $H -X POST http://airbox.local/api/factory-reset -d 'wifi=1&calib=1'
 ```
 
 For `factory-reset`, each flag is optional and defaults off (`0` = keep):
@@ -78,7 +83,7 @@ For `factory-reset`, each flag is optional and defaults off (`0` = keep):
 ### Change settings (POST, form-encoded)
 
 ```bash
-curl -X POST http://airbox.local/api/settings \
+curl -H 'X-AirBox: 1' -X POST http://airbox.local/api/settings \
   -d 'name=AirBox&unit=F&hostname=airbox&brightness=64&tz=1&night_en=0'
 ```
 
@@ -128,6 +133,9 @@ path at all — updates are USB-only.)
 | POST | `/api/clear-history` | Wipe the trend log |
 | POST | `/api/factory-reset` | Reset config (optional `wifi`/`calib` flags) |
 | GET/POST | `/update`, `/ota/*` | ElegantOTA firmware upload — **auth required** |
+
+All `POST /api/*` endpoints require the `X-AirBox: 1` header (CSRF guard); `/ota/*`
+requires HTTP Basic Auth. GET endpoints are open.
 
 A handy alias for daily use:
 

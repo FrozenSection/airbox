@@ -22,6 +22,9 @@ var TZ=['UTC','Eastern (New York)','Central (Chicago)','Mountain (Denver)','Ariz
 
 function f2c(f){return (f-32)*5/9;} function c2f(c){return c*9/5+32;}
 function fmt(v,d){return (v==null||isNaN(v))?'—':Number(v).toFixed(d==null?1:d);}
+// HTML-escape untrusted text before it goes into innerHTML (hostname is user-set
+// via /api/settings; SSID comes from the network name). Prevents stored XSS.
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 // Verdict deadband: don't flip the comfort word until the reading is past the
 // target by this much, so a value sitting right on a round-number setting (e.g.
 // 75 °F) doesn't flicker between "Comfortable" and "Warm". Temp in display unit.
@@ -194,7 +197,7 @@ function renderDiag(d){
   rows($('dgAq'),[['Raw BME temp',bon&&d.bme_temp!=null?fmt(d.bme_temp,1)+' °'+unit:dash],
     ['Raw BME humidity',bon&&d.bme_rh!=null?fmt(d.bme_rh,0)+' %':dash],
     ['eCO₂ (est.)',bon&&d.eco2!=null?fmt(d.eco2,0)+' ppm':dash],['bVOC',bon&&d.bvoc!=null?fmt(d.bvoc,2)+' ppm':dash]]);
-  rows($('dgNet'),[['IP address',d.ip||dash],['MAC address',d.mac||dash],['Hostname',(d.hostname||'airbox')+'.local'],['WiFi SSID',d.ssid||dash],['WiFi channel',d.chan?String(d.chan):dash],['WiFi RSSI',signal(d.rssi==null?-99:d.rssi)]]);
+  rows($('dgNet'),[['IP address',d.ip||dash],['MAC address',d.mac||dash],['Hostname',esc(d.hostname||'airbox')+'.local'],['WiFi SSID',d.ssid?esc(d.ssid):dash],['WiFi channel',d.chan?String(d.chan):dash],['WiFi RSSI',signal(d.rssi==null?-99:d.rssi)]]);
   rows($('dgSys'),[['Firmware','v'+(d.fw||'—')],['Uptime',ago(d.uptime)],['Chip temp',d.chip_temp==null?dash:Math.round(d.chip_temp)+' °C'],['Free heap',d.heap==null?dash:(d.heap/1024).toFixed(0)+' KB'],['Free heap (min)',d.heap_min==null?dash:(d.heap_min/1024).toFixed(0)+' KB'],['Last reset',d.reset_reason||dash]]);
 }
 
@@ -220,11 +223,15 @@ function save(){
     +'&comfort_tmin='+$('sTmin').value+'&comfort_tmax='+$('sTmax').value
     +'&comfort_hmin='+$('sHmin').value+'&comfort_hmax='+$('sHmax').value
     +'&comfort_unit='+setUnit;
-  fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body})
+  fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-AirBox':'1'},body:body})
     .then(function(){flashDone('✓ Saved — some changes apply after restart.');setTimeout(poll,400);})
     .catch(function(){flashDone('✓ Saved (preview — no device).');});
 }
-function post(path,confirmMsg){ if(confirmMsg&&!confirm(confirmMsg))return; fetch(path,{method:'POST'}).catch(function(){}); }
+// All state-changing POSTs carry X-AirBox; the firmware rejects mutating
+// requests without it. A cross-origin page can't set a custom header on a simple
+// request (and a fetch with one triggers a CORS preflight the device denies), so
+// this blocks drive-by CSRF while keeping the dashboard itself password-free.
+function post(path,confirmMsg){ if(confirmMsg&&!confirm(confirmMsg))return; fetch(path,{method:'POST',headers:{'X-AirBox':'1'}}).catch(function(){}); }
 
 /* ---- poll ----
    MOCK / MH are ONLY for previewing this file standalone in a browser (file://).
@@ -293,13 +300,13 @@ $('recfgBtn').onclick=function(){post('/api/reconfigure','Reboot into WiFi setup
 $('restartBtn').onclick=function(){post('/api/restart','Restart the device now?');};
 $('clrHistBtn').onclick=function(){
   if(!confirm('Clear all saved trend history? The charts will start over.'))return;
-  fetch('/api/clear-history',{method:'POST'}).then(function(){setTimeout(loadHist,800);}).catch(function(){});
+  fetch('/api/clear-history',{method:'POST',headers:{'X-AirBox':'1'}}).then(function(){setTimeout(loadHist,800);}).catch(function(){});
 };
 $('factoryBtn').onclick=function(){
   var w=$('frWifi').checked, c=$('frCalib').checked, ex=[];
   if(w)ex.push('WiFi'); if(c)ex.push('sensor calibration');
   if(!confirm('Factory reset — restore all settings to defaults'+(ex.length?', and also wipe '+ex.join(' + '):'')+'?\n\nThis cannot be undone.'))return;
-  fetch('/api/factory-reset',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'wifi='+(w?1:0)+'&calib='+(c?1:0)}).catch(function(){});
+  fetch('/api/factory-reset',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-AirBox':'1'},body:'wifi='+(w?1:0)+'&calib='+(c?1:0)}).catch(function(){});
 };
 window.addEventListener('resize',redraw);
 
