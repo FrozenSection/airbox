@@ -22,8 +22,12 @@ var TZ=['UTC','Eastern (New York)','Central (Chicago)','Mountain (Denver)','Ariz
 
 function f2c(f){return (f-32)*5/9;} function c2f(c){return c*9/5+32;}
 function fmt(v,d){return (v==null||isNaN(v))?'—':Number(v).toFixed(d==null?1:d);}
-function tcat(v,c){return v<c.tmin?'cold':(v>c.tmax?'warm':'ok');}
-function hcat(v,c){return v<c.hmin?'dry':(v>c.hmax?'humid':'ok');}
+// Verdict deadband: don't flip the comfort word until the reading is past the
+// target by this much, so a value sitting right on a round-number setting (e.g.
+// 75 °F) doesn't flicker between "Comfortable" and "Warm". Temp in display unit.
+var T_DB=0.1, H_DB=1;
+function tcat(v,c){return v<c.tmin-T_DB?'cold':(v>c.tmax+T_DB?'warm':'ok');}
+function hcat(v,c){return v<c.hmin-H_DB?'dry':(v>c.hmax+H_DB?'humid':'ok');}
 function comfort(t,h,c){var k=tcat(t,c)+'|'+hcat(h,c);var m=MX[k]||MX['ok|ok'];return {word:m[0],note:m[1],color:CC[k]||CC['ok|ok']};}
 // Bosch BSEC IAQ classification (0–500): descriptor for the tile pill, a ramp
 // color (green→red), and the guidance shown in the "Air quality note" card.
