@@ -45,8 +45,9 @@ with a 12-hour trend chart.
   mode.
 
 ## Good to know
-- **Firmware updates** happen in the browser at **`http://airbox.local/update`**
-  (no password needed — it's a local-network device).
+- **Firmware updates** happen in the browser at **`http://airbox.local/update`**.
+  It'll ask for a login — that's the one password-protected action on the device;
+  use the update credentials provided with the unit.
 - The screen dims/sleeps on a schedule if you enable **Night Mode**; the
   dashboard always works even when the screen is off.
 

@@ -51,9 +51,11 @@ sensor** on the dashboard. IAQ accuracy drops to 0 and re-learns over 24–48 h.
 ## Updating firmware
 
 - **Browser (normal):** Settings → **Firmware update**, or go to
-  `http://airbox.local/update`. Log in with username `admin` and your admin
-  password, then upload the new `.bin`. The device reboots automatically.
-- **USB:** re-flash from the Arduino IDE over USB-C any time.
+  `http://airbox.local/update`. The updater asks for a login (the firmware
+  update is the one password-protected action on the device); enter the
+  credentials provided with the unit, then upload the new `.bin`. The device
+  reboots automatically.
+- **USB:** re-flash from the Arduino IDE over USB-C any time (no login needed).
 
 If an update is ever interrupted (power loss mid-flash), the device's bootloader
 keeps the previous working firmware on its other partition; power-cycle and

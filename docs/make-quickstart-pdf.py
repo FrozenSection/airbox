@@ -101,7 +101,8 @@ S += [Paragraph("Reading the dashboard", hdr),
 
 S += [Paragraph("Good to know", hdr),
       bullet("Firmware updates happen in the browser at "
-             "<b>http://airbox.local/update</b> (no password needed)."),
+             "<b>http://airbox.local/update</b> (it asks for the update login "
+             "provided with your unit)."),
       bullet("Enable <b>Night Mode</b> to blank or dim the screen on a schedule; "
              "the dashboard still works while the screen is off.")]
 
