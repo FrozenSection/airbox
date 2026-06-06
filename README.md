@@ -2,7 +2,7 @@
 
 A small, self-contained indoor **environmental monitor** built on an Adafruit
 QT Py ESP32-S3. It measures temperature, humidity, barometric pressure, and air
-quality, and serves everything from a **local web dashboard** on your own WiFi —
+quality, and serves everything from a **local web dashboard** on local WiFi —
 no cloud, no app, no Home Assistant required.
 
 ![dashboard placeholder](docs/img/dashboard.png)
@@ -10,7 +10,7 @@ no cloud, no app, no Home Assistant required.
 
 ## What it does
 
-- **Measures:** temperature & humidity (HDC3022, lab-grade), barometric
+- **Measures:** temperature & humidity (HDC3022), barometric
   pressure and air quality / IAQ (BME688 via Bosch BSEC2).
 - **Local dashboard:** live readings + 12 h trend charts at
   `http://airbox.local`, served straight from the device. Works on a network
@@ -28,7 +28,7 @@ no cloud, no app, no Home Assistant required.
 - Adafruit HDC3022 precision temperature/humidity sensor (STEMMA QT)
 - Adafruit BME688 4-in-1 sensor (STEMMA QT)
 - *Optional:* a 128×64 SSD1306 STEMMA QT OLED (enables on-device readout and
-  the setup QR code; the device runs fine headless without it)
+  the setup QR code; the device runs fine headless, if desired)
 
 All three boards daisy-chain off the QT Py's STEMMA QT port (the secondary I²C
 bus, `Wire1`). See [`hardware/`](hardware/) for the enclosure.
@@ -70,11 +70,7 @@ Contributions and remixes welcome.
 
 ## Acknowledgments
 
-For honesty about how this was built: the firmware, captive-portal provisioning,
-web dashboard, and documentation were **written by Anthropic's Claude** (via
-Claude Code), working from the requirements, design decisions, hardware testing,
-and review provided by the repo owner. The code is AI-written under human
-direction — not hand-coded by the owner.
+For transparency: the firmware, captive-portal provisioning, web dashboard, and documentation were **written by Anthropic's Claude** (via Claude Code), working from the requirements, design decisions, hardware testing, and review provided by the repo owner. The code is AI-written under human direction — not hand-coded by the repo owner.
 
 (Forked from an earlier Home Assistant MQTT sensor and rebuilt as a standalone
 device.)
