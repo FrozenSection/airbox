@@ -31,6 +31,15 @@ axis (`-Xh … now`) and **min/max scale labels** so you can read the actual ran
 at a glance. History is saved to flash, so it **survives a reboot** and keeps up
 to **7 days** for CSV export (Diagnostics tab).
 
+> **A note on sudden steps in the trend.** Each chart point is a snapshot taken
+> every 5 minutes, so a *fast* real-world change — opening a window, cooking, a
+> shower in the next room — can appear as a steep, near-vertical step at the right
+> edge rather than a smooth curve. That's expected: the chart is a 5-minute-
+> resolution **trend**, and it simply has no in-between points to draw a fast
+> event with. The big numbers at the top of each tile are the live reading (they
+> update every few seconds); the chart will catch up and smooth out as the next
+> few samples come in. Nothing is wrong with the sensor.
+
 ## Diagnostics tab
 
 The raw/secondary values and device health, grouped by subsystem:
