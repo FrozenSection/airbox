@@ -857,7 +857,7 @@ void buildHistoryJson(JsonDocument& doc) {
   JsonArray arh = doc["rh"].to<JsonArray>();
   JsonArray ap = doc["p"].to<JsonArray>();
   JsonArray ai = doc["iaq"].to<JsonArray>();
-  // Chart shows only the most recent 8 h (CHART_SAMPLES); the full 7-day buffer
+  // Chart shows only the most recent 12 h (CHART_SAMPLES); the full 7-day buffer
   // is reserved for the CSV export. Emit oldest -> newest. ArduinoJson maps NaN
   // to JSON null (ARDUINOJSON_ENABLE_NAN == 0), so gaps come through cleanly.
   int n = histCount < CHART_SAMPLES ? histCount : CHART_SAMPLES;
