@@ -1,5 +1,15 @@
 # AirBox — Quick Start
 
+<!--
+  Regenerate the printable PDF after editing this file:
+
+      python3 -m venv /tmp/rlvenv && /tmp/rlvenv/bin/pip install -q reportlab
+      /tmp/rlvenv/bin/python docs/make-quickstart-pdf.py   # run from repo root
+
+  NOTE: the PDF text is hardcoded in make-quickstart-pdf.py, NOT read from this
+  markdown — if you change wording here, mirror it in that script too.
+-->
+
 > 🖨️ **Printable one-pager:** [`AirBox-Quick-Start.pdf`](AirBox-Quick-Start.pdf)
 > (includes a scan-to-open QR for this repo). Regenerate with
 > [`make-quickstart-pdf.py`](make-quickstart-pdf.py).
