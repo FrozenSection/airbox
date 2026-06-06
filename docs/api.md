@@ -56,7 +56,7 @@ while true; do curl -s http://airbox.local/api/data \
 ### History
 
 ```bash
-curl -s http://airbox.local/api/history      | jq   # JSON, the 8 h chart window
+curl -s http://airbox.local/api/history      | jq   # JSON, the 12 h chart window
 curl -s http://airbox.local/api/history.csv  -o airbox-history.csv  # full 7 days, streamed
 ```
 
@@ -104,7 +104,7 @@ curl -F 'firmware=@airbox.ino.bin' http://airbox.local/update
 | GET  | `/` | Dashboard (gzipped HTML) |
 | GET  | `/favicon.ico` | Tab icon |
 | GET  | `/api/data` | Live telemetry (JSON) |
-| GET  | `/api/history` | 8 h chart window (JSON) |
+| GET  | `/api/history` | 12 h chart window (JSON) |
 | GET  | `/api/history.csv` | Full 7-day history (CSV, chunked) |
 | POST | `/api/settings` | Update configuration |
 | POST | `/api/restart` | Reboot |
