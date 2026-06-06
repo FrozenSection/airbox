@@ -25,13 +25,29 @@ function fmt(v,d){return (v==null||isNaN(v))?'—':Number(v).toFixed(d==null?1:d
 // HTML-escape untrusted text before it goes into innerHTML (hostname is user-set
 // via /api/settings; SSID comes from the network name). Prevents stored XSS.
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
-// Verdict deadband: don't flip the comfort word until the reading is past the
-// target by this much, so a value sitting right on a round-number setting (e.g.
-// 75 °F) doesn't flicker between "Comfortable" and "Warm". Temp in display unit.
-var T_DB=0.1, H_DB=1;
-function tcat(v,c){return v<c.tmin-T_DB?'cold':(v>c.tmax+T_DB?'warm':'ok');}
-function hcat(v,c){return v<c.hmin-H_DB?'dry':(v>c.hmax+H_DB?'humid':'ok');}
-function comfort(t,h,c){var k=tcat(t,c)+'|'+hcat(h,c);var m=MX[k]||MX['ok|ok'];return {word:m[0],note:m[1],color:CC[k]||CC['ok|ok']};}
+// Comfort verdict with HYSTERESIS so the word can't flicker on a reading that
+// sits right on a target. Each axis is sticky: it enters the high band only
+// above (max + H) and leaves it only below (max - H) — and symmetrically for the
+// low band. The enter/exit thresholds are separated by 2·H, so a value parked on
+// e.g. a 75° target latches once and stays put (a real 0.2° swing is needed to
+// flip back, which sensor jitter never produces; HDC3022 noise is well under
+// that). H_T is in the display unit. State persists across the 4 s polls.
+var H_T=0.1, H_H=1;
+var lastTcat='ok', lastHcat='ok';
+// 3-state sticky classifier: returns loName / 'ok' / hiName, hysteretic on prev.
+function band(v,lo,hi,H,prev,loName,hiName){
+  if(prev===hiName) return (v < hi - H) ? 'ok' : hiName;  // leave high only below hi-H
+  if(prev===loName) return (v > lo + H) ? 'ok' : loName;  // leave low only above lo+H
+  if(v > hi + H) return hiName;                           // from ok: enter high above hi+H
+  if(v < lo - H) return loName;                           // from ok: enter low below lo-H
+  return 'ok';
+}
+function comfort(t,h,c){
+  lastTcat=band(t,c.tmin,c.tmax,H_T,lastTcat,'cold','warm');
+  lastHcat=band(h,c.hmin,c.hmax,H_H,lastHcat,'dry','humid');
+  var k=lastTcat+'|'+lastHcat;var m=MX[k]||MX['ok|ok'];
+  return {word:m[0],note:m[1],color:CC[k]||CC['ok|ok']};
+}
 // Bosch BSEC IAQ classification (0–500): descriptor for the tile pill, a ramp
 // color (green→red), and the guidance shown in the "Air quality note" card.
 var IAQ=[
