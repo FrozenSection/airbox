@@ -12,12 +12,12 @@ var CC={ 'cold|dry':'oklch(0.70 0.12 250)','cold|ok':'oklch(0.81 0.07 230)','col
 var MX={ 'ok|ok':['Comfortable','Temperature and humidity are both in your ideal range.'],
   'cold|ok':['Cool','A little cooler than your target — a touch of warmth would feel better.'],
   'warm|ok':['Warm','A little warmer than your target — a touch of cooling would feel better.'],
-  'ok|dry':['Dry','Comfortable temperature, but the air is dry — a humidifier would help.'],
-  'ok|humid':['Humid','Comfortable temperature, but the air is humid — ventilation would help.'],
+  'ok|dry':['Dry','Comfortable temperature, but the air is dry.'],
+  'ok|humid':['Humid','Comfortable temperature, but the air is humid.'],
   'cold|dry':['Cold & dry','Cool with dry air. Warm the room up and add a little moisture.'],
   'warm|dry':['Warm & dry','Warm with dry air. Cool the room down and add a little moisture.'],
-  'cold|humid':['Cold & damp','Cool and humid — the room can feel clammy. Warm it up and ventilate.'],
-  'warm|humid':['Warm & humid','Warm and humid — the room can feel muggy. Cool it down and ventilate.'] };
+  'cold|humid':['Cold & damp','Cool and humid — the room can feel clammy. Warm it up, or run a dehumidifier.'],
+  'warm|humid':['Warm & humid','Warm and humid — the room can feel muggy. Turn on that air conditioning.'] };
 var TZ=['UTC','Eastern (New York)','Central (Chicago)','Mountain (Denver)','Arizona (no DST)','Pacific (Los Angeles)','Alaska (Anchorage)','Hawaii (no DST)','UK (London)','Central Europe','India (Kolkata)','Japan (Tokyo)','Sydney'];
 
 function f2c(f){return (f-32)*5/9;} function c2f(c){return c*9/5+32;}
