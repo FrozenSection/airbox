@@ -42,7 +42,6 @@
 #include <ElegantOTA.h>
 
 #include "web_ui.h"
-#include "logo_png.h"
 
 #if ENABLE_MQTT
 #include <PubSubClient.h>
@@ -885,15 +884,6 @@ void registerRunRoutes() {
       req->beginResponse(200, "text/html", INDEX_HTML_GZ, INDEX_HTML_GZ_LEN);
     res->addHeader("Content-Encoding", "gzip");
     res->addHeader("Cache-Control", "max-age=86400");
-    req->send(res);
-  });
-  // Logo for the dev-console easter egg — lazy-loaded: only fetched when someone
-  // opens DevTools in a Chromium browser (the console renders it as a CSS
-  // background). Zero cost to normal page loads. Served zero-copy from flash.
-  server.on("/airbox-logo.png", HTTP_GET, [](AsyncWebServerRequest* req) {
-    AsyncWebServerResponse* res =
-      req->beginResponse(200, "image/png", AIRBOX_LOGO_PNG, AIRBOX_LOGO_PNG_LEN);
-    res->addHeader("Cache-Control", "max-age=604800");
     req->send(res);
   });
   server.on("/api/data", HTTP_GET, [](AsyncWebServerRequest* req) {
