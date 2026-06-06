@@ -53,13 +53,34 @@ edit. (Verified: compiles clean on esp32:esp32 3.3.8 for the QT Py S3.)
 ## Build flags (`config.h`)
 
 Everything tunable lives in [`airbox/config.h`](airbox/config.h).
-No secrets are stored in source — WiFi credentials, the admin/OTA password,
-and optional MQTT settings are entered in the web UI and saved to NVS.
+No secrets are stored in committed source — WiFi credentials and optional MQTT
+settings are entered in the web UI and saved to NVS; the OTA password lives in a
+gitignored `secret.h` (see below).
 
 - `ENABLE_MQTT` (default `0`) — also push to an MQTT broker / Home Assistant.
 - `ENABLE_ARDUINO_OTA` (default `0`) — network flashing from the IDE/PlatformIO.
-- `DEFAULT_ADMIN_PASS` (`"airbox"`) — initial password for OTA + Settings.
-  **Change it in the dashboard Settings page after first boot.**
+- `ENABLE_NET_OTA` (default `1`) — browser/ElegantOTA flashing. Set `0` for a
+  **USB-only** build with no network flash path at all (maximum hardening).
+
+### OTA security
+
+The dashboard is open by design (read-only, trusted-LAN), but **network OTA is
+the only remote code-execution path**, so it's locked separately. Copy
+[`airbox/secret.h.example`](airbox/secret.h.example) to `airbox/secret.h` (it's
+gitignored) and set a strong password:
+
+```c
+#define OTA_USERNAME "airbox"
+#define OTA_PASSWORD "a-long-random-string"
+```
+
+With `secret.h` present, `/update` and the `/ota/*` endpoints require HTTP Basic
+Auth — this defeats the realistic threat (an IoT worm scanning the LAN for open
+ESP OTA endpoints). Without `secret.h` the build still compiles but OTA is open
+and emits a `#warning`. The password is compile-time: to change it, edit
+`secret.h`, recompile, and flash once over USB. (It's plain HTTP, so it doesn't
+stop an on-path LAN MITM — for that you'd want signed images / Secure Boot, which
+is overkill for a one-off gift.)
 
 ## First flash
 
