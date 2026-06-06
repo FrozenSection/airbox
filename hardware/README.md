@@ -2,42 +2,44 @@
 
 3D-printable enclosure and mounting files for the standalone AirBox.
 
-> **Files coming soon.** Drop the enclosure models in [`enclosure/`](enclosure/)
-> — STL for printing, plus a STEP or native CAD source for remixing.
+## Files
 
-## Suggested contents (as files are added)
+| File | Print? | Purpose |
+|---|---|---|
+| `enclosure/AirBox_Enclosure.STL` | ✅ ×1 | Main body — the three-chamber enclosure |
+| `enclosure/AirBox_Back.STL` | ✅ ×1 | Back cover |
+| `enclosure/AirBox.3MF` | — | Both parts arranged in one project file (load this if your slicer prefers it) |
+| `enclosure/AirBox.STEP` | — | Editable CAD source, for remixing |
 
-```
-enclosure/
-├── airbox-case.stl        # main body
-├── airbox-lid.stl         # lid / vented front
-├── airbox.step            # editable CAD source
-└── ...
-```
+Print `AirBox_Enclosure.STL` **and** `AirBox_Back.STL` (one each). The `.3MF` is
+those same two parts bundled together for convenience; the `.STEP` is the
+editable source for anyone who wants to modify the design.
 
 ## Design notes / requirements
 
 The enclosure needs to accommodate the airflow the air-quality sensor depends
-on, and keep the BME688 away from the QT Py's self-heating:
+on, and keep the HDC3022 and BME688 away from heat sources:
 
-- **Vents** near the BME688 so ambient air reaches the gas/humidity sensor.
-  Without airflow, humidity and IAQ readings lag and drift.
-- **Separate the BME688 from the ESP32-S3** a little — the MCU and the BME688
-  heater both produce heat. The HDC3022 is the trusted temperature source, so
-  give *it* good ambient exposure too.
-- **OLED cutout** (optional build) for the 0.96" 128×64 display.
+- **Three separate chambers** to isolate the HDC3022, BME688, and QT Py ESP32/OLED display
+- **Vents** in all three chambers for adequate air flow and heat dissipation.
+- **OLED cutout** for the 0.96" 128×64 display.
 - **USB-C access** for power and recovery flashing.
-- **BOOT button access** (or a pin hole) for the WiFi-reset hold.
+- **No external BOOT button or pin-hole** — the QT Py's BOOT button (used for the
+  physical WiFi reset and for DFU recovery) stays sealed inside, so reaching it
+  means **opening the enclosure**. This is fine in normal use: WiFi reset and
+  reconfiguration are available from the dashboard (Settings → Reconfigure WiFi),
+  and firmware updates happen over the network or USB-C without opening the case.
+  See [recovery](../docs/recovery.md).
 - Daisy-chained STEMMA QT cables need a little internal slack.
 
-## Print settings (fill in once finalized)
+## Print settings
 
 | Setting | Value |
 |---|---|
 | Material | PETG |
 | Layer height | 0.2 mm |
-| Infill | 15–20 % |
-| Supports | _TBD per part_ |
+| Infill | Gyroid: 15% |
+| Supports | _TBD per part and as needed_ |
 
 ## License
 
