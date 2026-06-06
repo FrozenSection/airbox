@@ -141,7 +141,11 @@ function renderDash(d){
   var vw=$('vWord'); var glow=$('glow'), hero=document.querySelector('.hero');
   if(d.hdc_ok && d.temp!=null && d.rh!=null){
     var cf=comfort(d.temp,d.rh,c);
-    vw.textContent=cf.word; vw.style.color=cf.color; $('vNote').textContent=cf.note;
+    // A little hello for the recipient — appends to the note at the temp
+    // extremes, no effect on the verdict/color/settings. Threshold in °F.
+    var tF=(unit==='C')?c2f(d.temp):d.temp;
+    var egg=tF<67?' Scott would feel right at home here.':(tF>80?" Too warm for Scott, but I'm sure Rachel is comfortable.":'');
+    vw.textContent=cf.word; vw.style.color=cf.color; $('vNote').textContent=cf.note+egg;
     glow.style.setProperty('--cc',cf.color);
     hero.style.setProperty('--cc',cf.color);
     hero.style.setProperty('--cc-wash','color-mix(in oklch,'+cf.color+' 10%,transparent)');
