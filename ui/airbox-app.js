@@ -303,4 +303,22 @@ poll(); loadHist();
 // History only changes every 5 min on the device, so polling it every minute was
 // 5x wasted ~10 KB fetches; align to the sample cadence. /api/data stays at 4 s.
 setInterval(poll,4000); setInterval(loadHist,300000); setInterval(staleCheck,3000);
+
+/* ---- dev-console easter egg ---- prints on load. Chromium renders the goat
+   logo (CSS background → /airbox-logo.png, lazy-loaded); other browsers just
+   show the wordmark + note. */
+try {
+  console.log('%c ','font-size:1px;line-height:0;padding:78px 60px;background:url("/airbox-logo.png") no-repeat center;background-size:contain;');
+  console.log('%c\n'
+    +'    _    _      ____\n'
+    +'   / \\  (_)_ __| __ )  _____  __\n'
+    +'  / _ \\ | | \'__|  _ \\ / _ \\ \\/ /\n'
+    +' / ___ \\| | |  | |_) | (_) >  <\n'
+    +'/_/   \\_\\_|_|  |____/ \\___/_/\\_\\\n',
+    'color:#d98b4a;font-weight:bold');
+  console.log('%cHey Cesar — you found the console. Of course you did.\n'
+    +'%cBuilt for you by Scott · 2026.  Breathe easy.\n'
+    +'%c→ github.com/FrozenSection/airbox\n',
+    'color:#f4efe8;font-size:13px','color:#9fb0ab;font-size:12px','color:#6fae93;font-size:11px');
+} catch(e){}
 })();
