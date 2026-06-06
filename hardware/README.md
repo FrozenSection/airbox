@@ -34,7 +34,7 @@ on, and keep the BME688 away from the QT Py's self-heating:
 
 | Setting | Value |
 |---|---|
-| Material | PLA / PETG |
+| Material | PETG |
 | Layer height | 0.2 mm |
 | Infill | 15–20 % |
 | Supports | _TBD per part_ |
