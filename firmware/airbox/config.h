@@ -12,7 +12,7 @@
 // ----- Firmware identity -----
 // Bump on every change we flash, so the OLED header / dashboard confirm which
 // build is actually running (handy for verifying an OTA took).
-#define FW_VERSION        "1.3.38"
+#define FW_VERSION        "1.3.39"
 #define DEVICE_MODEL      "QT Py ESP32-S3 + BME688 + HDC3022 (standalone)"
 
 // ----- Feature flags -----
@@ -25,6 +25,14 @@
 // OFF by default — browser-based OTA (ElegantOTA at /update) is the primary
 // update path for a standalone gift. Turn on if you flash from a dev setup.
 #define ENABLE_ARDUINO_OTA   0
+
+// Network OTA master switch. 1 = browser/ElegantOTA flashing is available
+// (default); 0 = USB-only, NO network flash path at all — the maximum-hardening
+// build with zero remote code-execution surface. When enabled, OTA is protected
+// by HTTP Basic Auth *if* firmware/airbox/secret.h defines OTA_USERNAME/
+// OTA_PASSWORD (copy secret.h.example). Without secret.h the build still compiles
+// but OTA is open and a #warning is emitted at compile time.
+#define ENABLE_NET_OTA       1
 
 // ----- Captive-portal / AP defaults -----
 // Setup access point is intentionally OPEN (no password) so the OLED join-QR

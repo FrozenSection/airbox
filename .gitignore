@@ -9,6 +9,7 @@ build/
 # Local / generated config (none should ever contain committed secrets,
 # but ignore any local overrides a builder might create)
 firmware/**/secrets.h
+firmware/**/secret.h
 firmware/**/local_config.h
 
 # IDE / editor

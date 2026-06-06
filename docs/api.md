@@ -4,9 +4,11 @@ AirBox has no login shell — it's a microcontroller — but it exposes a clean 
 API over WiFi plus a USB serial console. Everything the dashboard does, you can do
 from a terminal with `curl`.
 
-The API is **unauthenticated by design** — a trusted-LAN environmental monitor.
-Anyone on the same WiFi can read and control it. (USB and OTA flashing are the only
-ways to change firmware.)
+The data and control API is **unauthenticated by design** — a trusted-LAN
+environmental monitor. Anyone on the same WiFi can read it and use the
+maintenance actions (restart, recalibrate, etc.). The **one exception is OTA
+firmware update**, which requires a password (see below) — it's the only path
+that can change the running code, so it's locked even though the rest is open.
 
 mDNS resolves `airbox.local`, but the resolver lags a few seconds — for scripting,
 use the device's raw IP (shown on the OLED, or read `.ip` from `/api/data`).
@@ -91,11 +93,24 @@ Changes take effect on the next firmware loop (a flag is set; the loop applies i
 
 ### Firmware update (OTA)
 
-Browser: `http://airbox.local/update` (ElegantOTA). Or scripted:
+Unlike the rest of the API, **OTA requires authentication** — it's the only
+endpoint that can change the firmware, so it's protected by HTTP Basic Auth
+(credentials set at build time in `firmware/airbox/secret.h`). The browser
+updater at `http://airbox.local/update` will prompt for them.
+
+Scripted (ElegantOTA's two-step flow; `$OTA_USER`/`$OTA_PASS` are your
+`secret.h` credentials):
 
 ```bash
-curl -F 'firmware=@airbox.ino.bin' http://airbox.local/update
+IP=airbox.local; BIN=airbox.ino.bin
+MD5=$(md5 -q "$BIN")                                    # Linux: md5sum
+curl -u "$OTA_USER:$OTA_PASS" "http://$IP/ota/start?mode=fr&hash=$MD5"
+curl -u "$OTA_USER:$OTA_PASS" -F "file=@$BIN;filename=airbox.ino.bin" \
+     "http://$IP/ota/upload"                            # device reboots on success
 ```
+
+(If the firmware was built with `ENABLE_NET_OTA 0`, there is no network flash
+path at all — updates are USB-only.)
 
 ### Endpoint summary
 
@@ -112,7 +127,7 @@ curl -F 'firmware=@airbox.ino.bin' http://airbox.local/update
 | POST | `/api/reconfigure` | Re-run first-time setup logic |
 | POST | `/api/clear-history` | Wipe the trend log |
 | POST | `/api/factory-reset` | Reset config (optional `wifi`/`calib` flags) |
-| *  | `/update` | ElegantOTA firmware upload |
+| GET/POST | `/update`, `/ota/*` | ElegantOTA firmware upload — **auth required** |
 
 A handy alias for daily use:
 

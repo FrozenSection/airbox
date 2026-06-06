@@ -44,6 +44,13 @@
 #include "web_ui.h"
 #include "favicon_png.h"
 
+// Optional OTA credentials. secret.h is gitignored (see secret.h.example). If it
+// defines OTA_USERNAME/OTA_PASSWORD, network OTA is protected by HTTP Basic Auth;
+// if absent, OTA is open and setupElegantOTA() emits a compile-time #warning.
+#if __has_include("secret.h")
+  #include "secret.h"
+#endif
+
 #if ENABLE_MQTT
 #include <PubSubClient.h>
 #endif
@@ -1035,11 +1042,14 @@ void registerPortalRoutes() {
 }
 
 // =================== OTA (browser via ElegantOTA) ===================
+#if ENABLE_NET_OTA
 void setupElegantOTA() {
-  // OTA is intentionally UNAUTHENTICATED: this is a read-only, trusted-LAN
-  // environmental monitor, and the rest of the web UI (settings, restart,
-  // reconfigure) is open too — a password on /update alone was security theater
-  // (and the default was public). Owner/friend can flash freely via the browser.
+  // OTA is the ONLY remote code-execution path on the device, so unlike the
+  // read-only dashboard and the recoverable nuisance endpoints (settings,
+  // restart, factory-reset), it's worth a lock. HTTP Basic Auth via secret.h
+  // defeats the realistic threat — an IoT worm scanning the LAN for open ESP
+  // OTA endpoints. (It's plain HTTP, so it does NOT stop an on-path LAN MITM;
+  // for that you'd need signed images / Secure Boot, which is overkill here.)
   ElegantOTA.onStart([]() {
     wdtReconfigure(OTA_WATCHDOG_MS);  // extend WDT for the flash duration
     Serial.println("OTA: starting (WDT extended)");
@@ -1052,8 +1062,16 @@ void setupElegantOTA() {
       Serial.println("OTA: complete, rebooting");
     }
   });
+#if defined(OTA_USERNAME) && defined(OTA_PASSWORD)
+  ElegantOTA.begin(&server, OTA_USERNAME, OTA_PASSWORD);  // auth covers /update + /ota/*
+  Serial.println("OTA: enabled (authenticated)");
+#else
+  #warning "AirBox: no secret.h -> network OTA is UNAUTHENTICATED. Copy firmware/airbox/secret.h.example to secret.h to lock it down (or set ENABLE_NET_OTA 0 for USB-only)."
   ElegantOTA.begin(&server);
+  Serial.println("OTA: enabled (UNAUTHENTICATED — no secret.h)");
+#endif
 }
+#endif  // ENABLE_NET_OTA
 
 #if ENABLE_ARDUINO_OTA
 void setupArduinoOTA() {
@@ -1265,7 +1283,9 @@ void startPortal() {
   WiFi.scanNetworks(true, true);  // kick off async scan for the portal list
   dnsServer.start(53, "*", apIP);
   registerPortalRoutes();
+#if ENABLE_NET_OTA
   setupElegantOTA();  // allow recovery flashing from the portal too
+#endif
   server.begin();
   showPortalScreen();
   Serial.println("Portal ready at http://" AP_IP_STR);
@@ -1278,12 +1298,14 @@ void startRun() {
   else
     Serial.printf("mDNS: http://%s.local\n", cfg.hostname.c_str());
   registerRunRoutes();
+#if ENABLE_NET_OTA
   setupElegantOTA();
+#endif
   server.begin();
   MDNS.addService("http", "tcp", 80);
   // NTP for the night-mode clock (harmless if night mode stays off).
   applyTimezone();
-#if ENABLE_ARDUINO_OTA
+#if ENABLE_ARDUINO_OTA && ENABLE_NET_OTA
   setupArduinoOTA();
 #endif
 #if ENABLE_MQTT
@@ -1434,7 +1456,9 @@ void setup() {
 // =================== loop ===================
 void loop() {
   esp_task_wdt_reset();
+#if ENABLE_NET_OTA
   ElegantOTA.loop();
+#endif
   checkBootButton();
   handlePendingActions();
 
@@ -1446,7 +1470,7 @@ void loop() {
   }
 
   // ---- MODE_RUN ----
-#if ENABLE_ARDUINO_OTA
+#if ENABLE_ARDUINO_OTA && ENABLE_NET_OTA
   ArduinoOTA.handle();
 #endif
 
