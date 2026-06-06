@@ -4,7 +4,7 @@ This device is designed so you can never paint yourself into a corner — there
 are three independent ways back to a working state, from fully software to
 fully physical.
 
-## 1. It couldn't join WiFi (automatic)
+## 1. It can't join WiFi (automatic)
 
 If the saved network is gone, renamed, or has a new password, the device tries
 to connect for ~30 seconds at boot and then **automatically falls back to the
@@ -13,8 +13,7 @@ You don't have to do anything to trigger this.
 
 ## 2. Reconfigure from the dashboard
 
-If you can still reach the dashboard and simply want to move it to a different
-network:
+If want to move it to a different network:
 
 1. Open `http://airbox.local` → **Settings** tab.
 2. Tap **Reconfigure WiFi** and confirm.

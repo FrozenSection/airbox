@@ -8,14 +8,12 @@ it starts a temporary setup hotspot so you can tell it which network to join.
 1. **Power the device.** After a few seconds the OLED shows **"WiFi Setup"**,
    the hotspot name **`AirBox-Setup`**, and a **QR code**.
 2. **Point your phone camera at the QR code.** It offers to join the
-   `AirBox-Setup` network — tap to join. (The setup hotspot is open/passwordless
-   on purpose, so the QR stays crisp on the small screen. It only ever serves
-   the setup page.)
+   `AirBox-Setup` network — tap to join. 
 3. Your phone should **automatically pop up the setup page**. If it doesn't,
    open a browser to **`http://192.168.4.1`**.
 4. **Pick your home WiFi** from the list, type its password, tap **Connect**.
 5. The device reboots and joins your network. The OLED then shows
-   **"Connected!"** with the dashboard address and a QR code linking to it.
+   **"Connected!"** with the dashboard address.
 
 ## The manual way (no OLED, or QR won't scan)
 
@@ -27,14 +25,13 @@ it starts a temporary setup hotspot so you can tell it which network to join.
 
 ## After setup
 
-- Open the dashboard at **`http://airbox.local`** (or scan the QR shown on the
-  OLED, or use the IP address your router assigned).
+- Open the dashboard at **`http://airbox.local`** (or use the IP address your router assigned).
 - Go to the **Settings** tab and:
-  - set a **device name** (e.g. "Office", "Nursery"),
+  - set a **device name** (e.g. "Office", "Nursery" if desired),
   - choose **°F or °C**.
 
 > **Air-quality calibration:** the IAQ reading starts at accuracy 0 and
-> self-calibrates over the first 24–48 hours of normal use. This is expected;
+> self-calibrates over the first **24–48 hours** of normal use. This is expected;
 > see [dashboard.md](dashboard.md).
 
 ## Acceptance checklist
